@@ -44,7 +44,12 @@ export const runtime = "nodejs";
 const finalizarSchema = z.object({
   // O `code` vale 5 minutos; o piso e o teto só barram lixo óbvio.
   code: z.string().trim().min(10).max(2000),
-  waba_id: z.string().trim().regex(/^[0-9]{5,30}$/),
+  // Opcional: o evento real da Meta pode vir sem `waba_id`; o servidor descobre pelo token.
+  waba_id: z
+    .string()
+    .trim()
+    .regex(/^[0-9]{5,30}$/)
+    .nullish(),
   phone_number_id: z
     .string()
     .trim()
@@ -106,7 +111,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const parsed = finalizarSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return fail("invalid_request", "code, waba_id e modo são obrigatórios", 422, { requestId });
+    return fail("invalid_request", "code e modo são obrigatórios", 422, { requestId });
   }
 
   const r = await conectarPeloSignup({
@@ -117,7 +122,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     requestId,
     base: basePublicaDoWebhookMeta(req),
     code: parsed.data.code,
-    wabaId: parsed.data.waba_id,
+    wabaId: parsed.data.waba_id ?? null,
     phoneNumberId: parsed.data.phone_number_id ?? null,
     modo: parsed.data.modo,
   });

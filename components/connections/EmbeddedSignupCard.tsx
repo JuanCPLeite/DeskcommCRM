@@ -93,6 +93,9 @@ function useSdkDaMeta(appId: string | null, version: string): boolean {
  * provar, com o token trocado do `code`, que o número é daquela conta. O token
  * nunca passa por este componente.
  */
+/** Largura total e quebra de linha no celular; tamanho natural de `sm` para cima. */
+const BOTAO_DA_CONEXAO = "h-auto min-h-11 w-full whitespace-normal py-2 text-center sm:w-auto lg:min-h-9";
+
 export function EmbeddedSignupCard() {
   const t = useT();
   const { data, isPending } = useEmbeddedSignupConfig();
@@ -121,7 +124,9 @@ export function EmbeddedSignupCard() {
     const code = codigo.current;
     const modo = modoAtual.current;
     if (!ev || !code || !modo || jaEnviado.current) return;
-    if (!ev.wabaId) {
+    // O evento real pode vir sem `waba_id` (medido em 22/11/2026): o servidor descobre a
+    // conta pelo token. Só sem NENHUM dos dois ids não há o que descobrir.
+    if (!ev.wabaId && !ev.phoneNumberId) {
       toast.error(t("A Meta não devolveu a conta do WhatsApp Business. Tente de novo."));
       reiniciar();
       return;
@@ -244,8 +249,12 @@ export function EmbeddedSignupCard() {
         </p>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
+      {/* Os dois botões levam a MESMA cor (destaque): o que muda é o texto, não o peso
+          visual — um preenchido e outro vazado fazia parecer que um é o "certo". No
+          celular ocupam a linha toda e o texto longo quebra em vez de estourar a tela. */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
         <Button
+          className={BOTAO_DA_CONEXAO}
           data-testid="signup-numero-novo"
           disabled={!config.modos.numero_novo.disponivel || !sdkPronto || ocupado || noTeto}
           onClick={() => abrir("numero_novo")}
@@ -254,7 +263,7 @@ export function EmbeddedSignupCard() {
         </Button>
         {config.modos.coexistencia.disponivel ? (
           <Button
-            variant="outline"
+            className={BOTAO_DA_CONEXAO}
             data-testid="signup-coexistencia"
             disabled={!sdkPronto || ocupado || noTeto}
             onClick={() => abrir("coexistencia")}

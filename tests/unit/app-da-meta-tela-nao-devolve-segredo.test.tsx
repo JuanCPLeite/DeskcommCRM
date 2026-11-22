@@ -115,7 +115,7 @@ async function filhosDaPagina(): Promise<Filho[]> {
 async function propsDaPagina(): Promise<Props> {
   const elemento = (await filhosDaPagina()).find((f) => f.type === FormularioDaMeta);
   expect(elemento, "a página não renderiza o FormularioDaMeta").toBeDefined();
-  return elemento!.props as Props;
+  return elemento!.props as unknown as Props;
 }
 
 describe("/admin/meta — o que a página entrega ao navegador", () => {

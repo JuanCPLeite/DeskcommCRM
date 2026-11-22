@@ -45,6 +45,7 @@ import { ACESSO_FECHADO, MENSAGEM_DO_TETO_DA_EMPRESA, acessoDaEmpresa, cabeMaisU
 import { appDaMeta } from "./app";
 import {
   descobrirNumerosDaWaba,
+  descobrirWabasDoToken,
   gerarPinDoNumero,
   registrarNumeroNaCloudApi,
   sincronizarCoexistencia,
@@ -71,7 +72,12 @@ export interface EntradaDoSignup {
   /** Base pública do webhook (`basePublicaDoWebhookMeta(req)`). */
   readonly base: string;
   readonly code: string;
-  readonly wabaId: string;
+  /**
+   * Pode faltar: o evento `FINISH` real da Meta (medido em 22/11/2026) vem SEM
+   * `waba_id`. Aí o servidor descobre a conta pelo token (`debug_token`) e prova que o
+   * número é dela.
+   */
+  readonly wabaId: string | null;
   /** Pode faltar (coexistência). Aí o servidor descobre pela WABA. */
   readonly phoneNumberId: string | null;
   readonly modo: ModoDoSignup;
@@ -116,8 +122,11 @@ export async function conectarPeloSignup(
 ): Promise<ConexaoDoSignup | FalhaDoSignup> {
   const { admin, organizationId, userId, requestId, modo } = entrada;
 
-  if (!idDaMetaValido(entrada.wabaId)) {
+  if (entrada.wabaId !== null && !idDaMetaValido(entrada.wabaId)) {
     return falha(422, "invalid_request", "O identificador da conta do WhatsApp Business veio em formato inválido.");
+  }
+  if (entrada.wabaId === null && entrada.phoneNumberId === null) {
+    return falha(422, "invalid_request", "A Meta não devolveu a conta nem o número. Refaça a conexão.");
   }
   if (entrada.phoneNumberId !== null && !idDaMetaValido(entrada.phoneNumberId)) {
     return falha(422, "invalid_request", "O identificador do número veio em formato inválido.");
@@ -158,10 +167,44 @@ export async function conectarPeloSignup(
   }
   const token = troca.accessToken;
 
-  // ── 3. Qual número? E ele é desta conta? ──────────────────────────────────
+  // ── 3. Qual conta? Qual número? E ele é daquela conta? ────────────────────
+  let wabaId = entrada.wabaId;
+  if (wabaId === null) {
+    // O evento da janela veio sem `waba_id`: as contas autorizadas saem do token, e a
+    // dona do número é a que o lista. Número que NENHUMA delas lista não se conecta.
+    const wabas = await descobrirWabasDoToken({ appId: signup.appId, appSecret: app.appSecret, token });
+    if (!wabas.ok) {
+      return falha(422, "waba_nao_encontrada", `Não deu para descobrir a conta do WhatsApp Business: ${wabas.motivo}.`);
+    }
+    if (wabas.wabaIds.length === 0) {
+      return falha(422, "waba_nao_encontrada", "A Meta não liberou nenhuma conta do WhatsApp Business para este cadastro. Refaça a conexão.");
+    }
+    const dona: string[] = [];
+    for (const candidata of wabas.wabaIds) {
+      const lista = await descobrirNumerosDaWaba({ wabaId: candidata, token });
+      if (!lista.ok) continue;
+      const acho = entrada.phoneNumberId
+        ? lista.numeros.some((n) => n.id === entrada.phoneNumberId)
+        : lista.numeros.length === 1;
+      if (acho) dona.push(candidata);
+    }
+    if (dona.length !== 1) {
+      // Zero ou mais de uma: não se adivinha, porque conectar a conta errada põe a
+      // mensagem de um cliente no inbox de outro.
+      return falha(
+        409,
+        "waba_ambigua",
+        dona.length === 0
+          ? "Não achei, nas contas liberadas pela Meta, a dona deste número. Refaça a conexão."
+          : "Mais de uma conta liberada contém este número, e não dá para saber qual usar. Use a aba de token.",
+      );
+    }
+    wabaId = dona[0]!;
+  }
+
   let phoneNumberId = entrada.phoneNumberId;
   if (!phoneNumberId) {
-    const achados = await descobrirNumerosDaWaba({ wabaId: entrada.wabaId, token });
+    const achados = await descobrirNumerosDaWaba({ wabaId, token });
     if (!achados.ok) {
       return falha(422, "numero_nao_encontrado", `Não deu para descobrir o número da conta: ${achados.motivo}.`);
     }
@@ -179,7 +222,7 @@ export async function conectarPeloSignup(
     phoneNumberId = achados.numeros[0]!.id;
   }
 
-  const validacao = await validateMetaCredentials({ phoneNumberId, token, wabaId: entrada.wabaId });
+  const validacao = await validateMetaCredentials({ phoneNumberId, token, wabaId });
   if (!validacao.ok) {
     return falha(422, "invalid_request", validacao.motivo);
   }
@@ -229,7 +272,7 @@ export async function conectarPeloSignup(
     organization_id: organizationId,
     provider: CHANNEL_PROVIDER_META,
     meta_phone_number_id: phoneNumberId,
-    meta_waba_id: entrada.wabaId,
+    meta_waba_id: wabaId,
     meta_token_encrypted: cifrado,
     phone_number: validacao.displayPhoneNumber ? `+${validacao.displayPhoneNumber.replace(/\D/g, "")}` : null,
     display_name: existente?.display_name || (validacao.verifiedName ?? "Canal oficial"),
@@ -327,7 +370,7 @@ export async function conectarPeloSignup(
         admin: admin as Parameters<typeof registrarWebhookDaSessao>[0]["admin"],
         channelSessionId,
         phoneNumberId,
-        wabaId: entrada.wabaId,
+        wabaId,
         tokenCifrado: cifrado,
         webhookPathToken,
         base: entrada.base,

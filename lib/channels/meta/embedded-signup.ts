@@ -168,6 +168,48 @@ export async function descobrirNumerosDaWaba(input: {
   return { ok: true, numeros };
 }
 
+export type DescobertaDeWabas =
+  | { ok: true; wabaIds: readonly string[] }
+  | { ok: false; motivo: string };
+
+const FORMATO_DE_ID_DA_META = /^[0-9]{5,30}$/;
+
+/**
+ * As WABAs que o cliente autorizou para este token — para quando o evento da janela
+ * NÃO traz o `waba_id`.
+ *
+ * Medido num app real em 22/11/2026: o evento `FINISH` chegou com `phone_number_id`,
+ * `business_id` e `messaging_account_ids`, e SEM `waba_id`. O caminho que a Meta
+ * documenta para esse caso é o `debug_token`: os `granular_scopes` de
+ * `whatsapp_business_management` listam, em `target_ids`, as contas autorizadas.
+ *
+ * O app token (`APP_ID|APP_SECRET`) vai no parâmetro `access_token` desta consulta e
+ * nunca é logado nem devolvido; o motivo de erro vem do corpo da Meta, não da URL.
+ */
+export async function descobrirWabasDoToken(input: {
+  appId: string;
+  appSecret: string;
+  token: string;
+}): Promise<DescobertaDeWabas> {
+  const params = new URLSearchParams({
+    input_token: input.token,
+    access_token: `${input.appId}|${input.appSecret}`,
+  });
+  const res = await chamarAGraph(`${graphBaseUrl()}/debug_token?${params.toString()}`, { method: "GET" });
+  if (!res.ok) return { ok: false, motivo: motivoDoErro(res) };
+  const escopos = (res.body as { data?: { granular_scopes?: unknown } } | null)?.data?.granular_scopes;
+  if (!Array.isArray(escopos)) return { ok: false, motivo: "resposta_sem_escopos" };
+  const ids = new Set<string>();
+  for (const e of escopos) {
+    const s = e as { scope?: unknown; target_ids?: unknown };
+    if (s.scope !== "whatsapp_business_management" || !Array.isArray(s.target_ids)) continue;
+    for (const id of s.target_ids) {
+      if (typeof id === "string" && FORMATO_DE_ID_DA_META.test(id)) ids.add(id);
+    }
+  }
+  return { ok: true, wabaIds: [...ids] };
+}
+
 /** PIN de 6 dígitos da verificação em duas etapas (CSPRNG, nunca `Math.random`). */
 export function gerarPinDoNumero(): string {
   return String(randomInt(0, 1_000_000)).padStart(6, "0");

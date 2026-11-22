@@ -18,6 +18,7 @@ const h = vi.hoisted(() => ({
   acesso: vi.fn(),
   troca: vi.fn(),
   descobrir: vi.fn(),
+  wabas: vi.fn(),
   registrar: vi.fn(),
   sincronizar: vi.fn(),
   validar: vi.fn(),
@@ -41,6 +42,7 @@ vi.mock("@/lib/channels/meta/embedded-signup", async (original) => ({
   ...(await original<Record<string, unknown>>()),
   trocarCodigoPorToken: h.troca,
   descobrirNumerosDaWaba: h.descobrir,
+  descobrirWabasDoToken: h.wabas,
   registrarNumeroNaCloudApi: h.registrar,
   sincronizarCoexistencia: h.sincronizar,
 }));
@@ -124,6 +126,7 @@ beforeEach(() => {
   h.acesso.mockResolvedValue({ embeddedSignup: true, coexistencia: true, maxNumeros: null });
   h.troca.mockResolvedValue({ ok: true, accessToken: TOKEN_DA_META });
   h.descobrir.mockResolvedValue({ ok: true, numeros: [{ id: "2222222222", displayPhoneNumber: "55 31 99999-0000", verifiedName: "Loja" }] });
+  h.wabas.mockResolvedValue({ ok: true, wabaIds: ["1111111111"] });
   h.registrar.mockResolvedValue({ ok: true });
   h.sincronizar.mockResolvedValue({ contatos: { ok: true }, historico: { ok: true } });
   h.validar.mockResolvedValue({ ok: true, displayPhoneNumber: "55 31 99999-0000", verifiedName: "Loja", qualityRating: null });
@@ -259,6 +262,61 @@ describe("coexistência", () => {
     await conectarPeloSignup(entrada(admin, { modo: "coexistencia", phoneNumberId: null }));
     expect(h.descobrir).toHaveBeenCalledWith({ wabaId: "1111111111", token: TOKEN_DA_META });
     expect(banco.insercoes[0]).toMatchObject({ meta_phone_number_id: "2222222222" });
+  });
+
+  describe("evento SEM waba_id (formato real da Meta, medido em 22/11/2026)", () => {
+    it("⭐ descobre a conta pelo token e prova que o número é dela", async () => {
+      const { admin, banco } = bancoDuble();
+      const r = await conectarPeloSignup(entrada(admin, { wabaId: null }));
+      expect(r).toMatchObject({ ok: true });
+      expect(h.wabas).toHaveBeenCalledWith({ appId: "9999999999", appSecret: expect.any(String), token: TOKEN_DA_META });
+      expect(h.validar).toHaveBeenCalledWith(expect.objectContaining({ phoneNumberId: "2222222222", wabaId: "1111111111" }));
+      expect(banco.insercoes[0]).toMatchObject({ meta_waba_id: "1111111111", meta_phone_number_id: "2222222222" });
+    });
+
+    it("escolhe, entre várias contas liberadas, a que LISTA o número", async () => {
+      h.wabas.mockResolvedValue({ ok: true, wabaIds: ["3333333333", "1111111111"] });
+      h.descobrir.mockImplementation(async ({ wabaId }: { wabaId: string }) => ({
+        ok: true,
+        numeros: wabaId === "1111111111" ? [{ id: "2222222222", displayPhoneNumber: null, verifiedName: null }] : [{ id: "7777777777", displayPhoneNumber: null, verifiedName: null }],
+      }));
+      const { admin, banco } = bancoDuble();
+      expect(await conectarPeloSignup(entrada(admin, { wabaId: null }))).toMatchObject({ ok: true });
+      expect(banco.insercoes[0]).toMatchObject({ meta_waba_id: "1111111111" });
+    });
+
+    it("⭐ número que NENHUMA conta liberada lista: 409 e nada é gravado", async () => {
+      h.descobrir.mockResolvedValue({ ok: true, numeros: [{ id: "7777777777", displayPhoneNumber: null, verifiedName: null }] });
+      const { admin, banco } = bancoDuble();
+      expect(await conectarPeloSignup(entrada(admin, { wabaId: null }))).toMatchObject({ ok: false, status: 409, code: "waba_ambigua" });
+      expect(banco.insercoes).toHaveLength(0);
+    });
+
+    it("⭐ duas contas listam o número: não adivinha", async () => {
+      h.wabas.mockResolvedValue({ ok: true, wabaIds: ["1111111111", "3333333333"] });
+      const { admin, banco } = bancoDuble();
+      expect(await conectarPeloSignup(entrada(admin, { wabaId: null }))).toMatchObject({ ok: false, status: 409, code: "waba_ambigua" });
+      expect(banco.insercoes).toHaveLength(0);
+    });
+
+    it("token sem nenhuma conta liberada: 422 com o que fazer", async () => {
+      h.wabas.mockResolvedValue({ ok: true, wabaIds: [] });
+      const { admin } = bancoDuble();
+      expect(await conectarPeloSignup(entrada(admin, { wabaId: null }))).toMatchObject({ ok: false, status: 422, code: "waba_nao_encontrada" });
+    });
+
+    it("debug_token recusado pela Meta: 422 com o motivo", async () => {
+      h.wabas.mockResolvedValue({ ok: false, motivo: "token inválido" });
+      const { admin } = bancoDuble();
+      const r = await conectarPeloSignup(entrada(admin, { wabaId: null }));
+      expect(r).toMatchObject({ ok: false, status: 422, code: "waba_nao_encontrada" });
+    });
+
+    it("sem waba_id E sem phone_number_id: recusa sem gastar o código", async () => {
+      const { admin } = bancoDuble();
+      expect(await conectarPeloSignup(entrada(admin, { wabaId: null, phoneNumberId: null }))).toMatchObject({ ok: false, status: 422 });
+      expect(h.troca).not.toHaveBeenCalled();
+    });
   });
 
   it("⭐ conta com mais de um número: NÃO adivinha — conectar o errado põe a mensagem de um cliente no inbox de outro", async () => {

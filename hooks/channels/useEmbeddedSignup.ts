@@ -30,7 +30,7 @@ export interface EmbeddedSignupConfig {
 
 export interface FinalizarInput {
   code: string;
-  waba_id: string;
+  waba_id?: string | null;
   phone_number_id?: string | null;
   modo: ModoDoSignup;
 }

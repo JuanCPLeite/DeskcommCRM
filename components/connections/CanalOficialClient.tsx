@@ -47,10 +47,10 @@ function ParaColar({
         {rotulo}
       </span>
       <div className="flex items-center gap-2">
-        <code className="flex-1 overflow-x-auto rounded-md bg-muted px-2 py-1.5 text-xs">{valor}</code>
+        <code className="min-w-0 flex-1 overflow-x-auto rounded-md bg-muted px-2 py-1.5 text-xs">{valor}</code>
         <Button
           size="sm"
-          variant="outline"
+          className="shrink-0"
           onClick={async () => {
             await copyToClipboard(valor);
             toast.success(t("Copiado."));
@@ -224,7 +224,7 @@ export function CanalOficialClient() {
               <Button
                 type="button"
                 size="sm"
-                variant="outline"
+                className="w-full sm:w-auto"
                 onClick={() => registrarWebhook.mutate()}
                 disabled={registrarWebhook.isPending}
               >
@@ -358,7 +358,12 @@ export function CanalOficialClient() {
               {t("Guardado cifrado. Não é exibido de volta em nenhum momento.")}
             </span>
           </div>
-          <Button type="submit" disabled={conectar.isPending} data-testid="btn-conectar">
+          <Button
+            type="submit"
+            className="h-auto min-h-11 w-full whitespace-normal py-2 text-center sm:w-auto lg:min-h-9"
+            disabled={conectar.isPending}
+            data-testid="btn-conectar"
+          >
             {conectar.isPending ? t("Validando com a Meta…") : t("Validar e conectar")}
           </Button>
         </form>
