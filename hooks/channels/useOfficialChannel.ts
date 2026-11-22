@@ -5,6 +5,14 @@ import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { apiClient } from "@/lib/api/client";
 
 /** Um número oficial ativo da empresa (#4074: pode haver mais de um). Sem token. */
+/** O andamento do histórico da coexistência — espelho de `HistoricoDoNumero` no servidor. */
+export interface HistoricoDoNumero {
+  progresso: number | null;
+  mensagens: number;
+  concluido: boolean;
+  erro: string | null;
+}
+
 export interface NumeroOficial {
   id: string;
   displayName: string | null;
@@ -12,6 +20,7 @@ export interface NumeroOficial {
   status: string | null;
   phoneNumberId: string | null;
   wabaId: string | null;
+  historico?: HistoricoDoNumero | null;
 }
 
 export interface OfficialChannelState {

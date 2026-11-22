@@ -45,6 +45,7 @@ import {
   ingestMetaInbound,
   ingestMetaReaction,
 } from "@/lib/channels/meta/ingest";
+import { ingestMetaHistoryChunk } from "@/lib/channels/meta/historico";
 import { metaSessionByWebhookToken } from "@/lib/channels/meta/session";
 import {
   MOTIVO_CONTATO_ANONIMIZADO,
@@ -304,6 +305,36 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
           request_id: requestId,
           status: r.status,
           reason: r.status === "failed" ? r.reason : undefined,
+          phone_number_id: e.phoneNumberId,
+        });
+      }
+      continue;
+    }
+
+    if (e.kind === "history_chunk") {
+      // Coexistência: um pedaço do HISTÓRICO do app. É passado, não mensagem nova:
+      // entra com a chave que cala os gatilhos (agente, demanda, push) e sem
+      // carimbar conversa — ver `ingestMetaHistoryChunk`. Mesma política de falha
+      // das outras: 2xx sempre (a Meta reentregaria), falha no log e no corpo.
+      const r = await ingestMetaHistoryChunk(admin, e, { organizationId: session.organizationId });
+      desfechos.push(`historico:${r.status}`);
+      if (r.status === "failed" || r.status === "no_session") {
+        logger.error("[meta.ingest] pedaço do histórico não importado", {
+          request_id: requestId,
+          status: r.status,
+          reason: r.status === "failed" ? r.reason : undefined,
+          phone_number_id: e.phoneNumberId,
+        });
+      } else if (r.status === "declined") {
+        logger.warn("[meta.ingest] a Meta não vai entregar o histórico", {
+          request_id: requestId,
+          codigo: r.code,
+          phone_number_id: e.phoneNumberId,
+        });
+      } else if (r.conversasComFalha > 0) {
+        logger.error("[meta.ingest] conversas do histórico não gravadas", {
+          request_id: requestId,
+          conversas_com_falha: r.conversasComFalha,
           phone_number_id: e.phoneNumberId,
         });
       }

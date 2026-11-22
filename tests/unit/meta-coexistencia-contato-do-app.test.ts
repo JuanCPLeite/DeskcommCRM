@@ -209,12 +209,12 @@ describe("parser: smb_app_state_sync vira evento de contato", () => {
         typeof parseMetaWebhook
       >[0],
     );
-    // Um `field` que não tratamos (a #1632 fala em `history`; essa parte ficou
-    // fora de escopo) continua caindo fora de propósito, como todo evento
-    // desconhecido — recusar viraria re-entrega em loop.
+    // Um `field` que não tratamos continua caindo fora de propósito, como todo
+    // evento desconhecido — recusar viraria re-entrega em loop. (`history` já
+    // não serve de exemplo: virou evento próprio, `history_chunk`, #4074.)
     const outroField = {
       object: "whatsapp_business_account",
-      entry: [{ id: "waba-1", changes: [{ field: "history", value: { history: [{ id: "wamid.X" }] } }] }],
+      entry: [{ id: "waba-1", changes: [{ field: "account_alerts", value: { alert: [{ id: "x" }] } }] }],
     };
 
     expect(semNumero).toEqual([]);

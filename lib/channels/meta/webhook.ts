@@ -18,6 +18,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { parseMetaInboundContact } from "@/lib/channels/meta/contact-card";
+import { samePhone } from "@/lib/channels/phone-variants";
 import type { SharedContact } from "@/lib/messaging/contact-card";
 import type { MetaWebhookEnvelope } from "./envelope";
 
@@ -251,13 +252,63 @@ export interface ReactionEvent {
   sentAt: Date;
 }
 
+/** Uma mensagem do PASSADO, trazida pela sincronização de histórico da coexistência. */
+export interface HistoryMessage {
+  /** `wamid` — a mesma chave de idempotência da mensagem ao vivo. */
+  externalId: string;
+  /**
+   * `wa_id` do CLIENTE da conversa (`threads[].id`). É o dono da conversa nas duas
+   * direções: na saída, `from` é o NOSSO número, e usá-lo como contato criaria a
+   * empresa como cliente dela mesma.
+   */
+  contato: string;
+  /** `from` igual ao cliente da conversa = recebida; qualquer outro = enviada pela empresa. */
+  direction: "inbound" | "outbound";
+  sentAt: Date;
+  /** Sempre um valor de `messages_type_check` — ver `TIPO_NO_CRM`. */
+  type: string;
+  rawType?: string;
+  text: string | null;
+  sharedContact?: SharedContact | null;
+  media: {
+    id: string;
+    mime: string | null;
+    voice: boolean;
+    filename?: string | null;
+  } | null;
+  /** `history_context.status` cru (SENT, DELIVERED, READ, PLAYED, PENDING, ERROR). */
+  status: string | null;
+}
+
+/**
+ * Um pedaço do HISTÓRICO que a Meta entrega depois da conexão de um número em
+ * coexistência (campo `history`). Só chega UMA vez, dentro das 24 h seguintes ao
+ * pedido (`smb_app_data`), em vários pedaços (`phase` / `chunk_order`).
+ *
+ * `erro` preenchido = a Meta recusou entregar (o dono do número não aceitou
+ * compartilhar o histórico no celular, ou a janela de 24 h passou). Vem no lugar
+ * das `threads`, e é o único jeito de o CRM saber que nada mais virá.
+ */
+export interface HistoryChunkEvent {
+  kind: "history_chunk";
+  wabaId: string;
+  phoneNumberId: string;
+  phase: number | null;
+  chunk: number | null;
+  /** Percentual informado pela Meta (0–100). */
+  progress: number | null;
+  mensagens: HistoryMessage[];
+  erro: { code: number | null; title: string | null } | null;
+}
+
 export type MetaWebhookEvent =
   | TemplateStatusEvent
   | MessageStatusEvent
   | InboundMessageEvent
   | OutboundEchoEvent
   | AppContactSyncEvent
-  | ReactionEvent;
+  | ReactionEvent
+  | HistoryChunkEvent;
 
 /**
  * O formato do fio mora em `./envelope.ts`, onde é um schema Zod — e o tipo
@@ -544,6 +595,79 @@ export function parseMetaWebhook(envelope: MetaWebhookEnvelope): MetaWebhookEven
             // `remove` vem sem nome de propósito — ver `AppContactSyncEvent`.
             name: str(contato.full_name) ?? str(contato.first_name),
             action: str(raw.action) ?? "add",
+          });
+        }
+        continue;
+      }
+      // Coexistência: o HISTÓRICO de conversas do app, entregue em pedaços depois de
+      // `smb_app_data` (`history[]` → `threads[]` → `messages[]`). O corpo de cada
+      // mensagem é o mesmo da recebida; o que muda é de quem ela é — ver `HistoryMessage`.
+      if (change.field === "history" && Array.isArray(v.history)) {
+        const meta = (v.metadata ?? {}) as Record<string, unknown>;
+        for (const pedaco of v.history as unknown[]) {
+          const p = objetoSimples(pedaco);
+          if (!p) continue;
+          const info = objetoSimples(p.metadata);
+          const numeroOuNulo = (x: unknown): number | null => {
+            const n = typeof x === "number" ? x : Number(str(x) ?? "");
+            return Number.isFinite(n) ? n : null;
+          };
+          const erros = Array.isArray(p.errors) ? (p.errors as unknown[]) : [];
+          const primeiroErro = objetoSimples(erros[0]);
+          const mensagens: HistoryMessage[] = [];
+          for (const th of Array.isArray(p.threads) ? (p.threads as unknown[]) : []) {
+            const fio = objetoSimples(th);
+            const contato = str(fio?.id);
+            if (!fio || !contato || !Array.isArray(fio.messages)) continue;
+            for (const m of fio.messages as unknown[]) {
+              const raw = objetoSimples(m);
+              if (!raw) continue;
+              const id = str(raw.id);
+              const de = str(raw.from);
+              const tipo = str(raw.type) ?? "unknown";
+              if (!id || !de) continue; // payload capenga não vira linha meia-boca
+              // Reação e revogação não são mensagem: não há o que gravar no passado.
+              if (tipo === "reaction" || tipo === "revoke" || tipo === "edit") continue;
+
+              const corpoMidia = tipo !== "contacts" ? objetoSimples(raw[tipo]) : null;
+              const sharedContact = tipo === "contacts" ? parseMetaInboundContact(raw) : null;
+              const { tipoCrm, rawType } = noVocabularioDoCrm(tipo);
+              mensagens.push({
+                externalId: id,
+                contato,
+                direction: samePhone(de, contato) ? "inbound" : "outbound",
+                sentAt: new Date(Number(str(raw.timestamp) ?? "0") * 1000),
+                type: tipoCrm,
+                ...(rawType !== undefined ? { rawType } : {}),
+                text:
+                  tipoCrm === "text"
+                    ? str(objetoSimples(raw.text)?.body)
+                    : sharedContact?.name ?? str(corpoMidia?.caption),
+                ...(sharedContact ? { sharedContact } : {}),
+                media:
+                  corpoMidia && str(corpoMidia.id)
+                    ? {
+                        id: str(corpoMidia.id)!,
+                        mime: str(corpoMidia.mime_type),
+                        voice: corpoMidia.voice === true,
+                        filename: str(corpoMidia.filename),
+                      }
+                    : null,
+                status: str(objetoSimples(raw.history_context)?.status),
+              });
+            }
+          }
+          out.push({
+            kind: "history_chunk",
+            wabaId,
+            phoneNumberId: str(meta.phone_number_id) ?? "",
+            phase: numeroOuNulo(info?.phase),
+            chunk: numeroOuNulo(info?.chunk_order),
+            progress: numeroOuNulo(info?.progress),
+            mensagens,
+            erro: primeiroErro
+              ? { code: numeroOuNulo(primeiroErro.code), title: str(primeiroErro.title) }
+              : null,
           });
         }
         continue;

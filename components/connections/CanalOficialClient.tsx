@@ -108,6 +108,47 @@ export function CanalOficialClient() {
           </ul>
         </Card>
       ) : null}
+      {/* Histórico da coexistência: a Meta entrega depois da conexão, em pedaços, e
+          sem esta linha o operador não teria como saber se vem, se parou ou por quê. */}
+      {(estado?.numeros ?? []).some((n) => n.historico) ? (
+        <Card className="flex flex-col gap-2 p-4" data-testid="historico-da-coexistencia">
+          <h2 className="font-medium">{t("Histórico das conversas do aplicativo")}</h2>
+          <ul className="flex flex-col gap-1.5">
+            {(estado?.numeros ?? [])
+              .filter((n) => n.historico)
+              .map((n) => (
+                <li key={n.id} className="flex flex-col gap-0.5 text-sm" data-testid="historico-do-numero">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium">{n.displayName ?? t("Canal oficial")}</span>
+                    {n.phoneNumber ? (
+                      <Badge variant="outline" className="font-mono text-xs">
+                        {n.phoneNumber}
+                      </Badge>
+                    ) : null}
+                    <Badge variant={n.historico?.erro ? "destructive" : "outline"}>
+                      {n.historico?.concluido
+                        ? t("importado")
+                        : n.historico?.erro
+                          ? t("não entregue")
+                          : `${n.historico?.progresso ?? 0}%`}
+                    </Badge>
+                  </span>
+                  <span className="text-muted-foreground">
+                    {n.historico?.mensagens ?? 0} {t("mensagens antigas já estão no CRM")}
+                  </span>
+                  {n.historico?.erro ? (
+                    <span className="text-destructive">{n.historico.erro}</span>
+                  ) : null}
+                </li>
+              ))}
+          </ul>
+          <p className="text-xs text-muted-foreground">
+            {t(
+              "As conversas antigas entram encerradas e sem dono, como histórico: não acordam o agente nem geram atendimento.",
+            )}
+          </p>
+        </Card>
+      ) : null}
       {estado?.connected ? (
         <Card className="p-4" data-testid="canal-conectado">
           <div className="flex flex-wrap items-center gap-2">

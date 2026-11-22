@@ -35,6 +35,20 @@ export async function contarNumerosAtivos(
   return (r as { count?: number | null }).count ?? 0;
 }
 
+/**
+ * O andamento do histórico da coexistência de um número — só o que a tela mostra.
+ * `null` no número = não é coexistência, ou a Meta ainda não entregou nada.
+ */
+export interface HistoricoDoNumero {
+  /** Último percentual informado pela Meta (0–100); `null` = nenhum pedaço chegou. */
+  progresso: number | null;
+  /** Mensagens do histórico que já estão no CRM. */
+  mensagens: number;
+  concluido: boolean;
+  /** Por que parou ou o que ficou de fora. Texto curto, sem conteúdo de conversa. */
+  erro: string | null;
+}
+
 export interface NumeroOficial {
   id: string;
   displayName: string | null;
@@ -42,6 +56,44 @@ export interface NumeroOficial {
   status: string | null;
   phoneNumberId: string | null;
   wabaId: string | null;
+  /** Só de número em coexistência que já recebeu (ou teve recusado) o histórico. */
+  historico: HistoricoDoNumero | null;
+}
+
+/**
+ * O andamento de cada número, por sessão. Mesma regra da lista: é um EXTRA, e a
+ * falha de leitura vira "sem andamento" — nunca esconde o número.
+ */
+async function andamentoDoHistorico(
+  admin: SupabaseClient,
+  organizationId: string,
+): Promise<Map<string, HistoricoDoNumero>> {
+  const { data, error } = await admin
+    .from("channel_session_meta_signup")
+    .select(
+      "channel_session_id, historico_progresso, historico_mensagens, historico_concluido_em, historico_erro, historico_atualizado_em",
+    )
+    .eq("organization_id", organizationId);
+  const mapa = new Map<string, HistoricoDoNumero>();
+  if (error || !Array.isArray(data)) return mapa;
+  for (const l of data as Array<{
+    channel_session_id: string;
+    historico_progresso: number | null;
+    historico_mensagens: number | null;
+    historico_concluido_em: string | null;
+    historico_erro: string | null;
+    historico_atualizado_em: string | null;
+  }>) {
+    // Sem nenhum pedaço (nem recusa) a Meta ainda não falou: não há o que mostrar.
+    if (!l.historico_atualizado_em) continue;
+    mapa.set(l.channel_session_id, {
+      progresso: l.historico_progresso ?? null,
+      mensagens: l.historico_mensagens ?? 0,
+      concluido: l.historico_concluido_em !== null,
+      erro: l.historico_erro ?? null,
+    });
+  }
+  return mapa;
 }
 
 /**
@@ -65,6 +117,7 @@ export async function listarNumerosOficiais(
     () => listar(),
   );
   if (error || !Array.isArray(data)) return [];
+  const andamento = await andamentoDoHistorico(admin, organizationId);
   return (data as Array<Record<string, string | null>>).map((l) => ({
     id: String(l.id),
     displayName: l.display_name ?? null,
@@ -72,5 +125,6 @@ export async function listarNumerosOficiais(
     status: l.status ?? null,
     phoneNumberId: l.meta_phone_number_id ?? null,
     wabaId: l.meta_waba_id ?? null,
+    historico: andamento.get(String(l.id)) ?? null,
   }));
 }

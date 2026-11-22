@@ -89905,3 +89905,25 @@ create trigger trg_channel_session_meta_signup_updated_at
   for each row execute function public.fn_set_updated_at();
 
 notify pgrst, 'reload schema';
+
+-- ---- Coexistência: o histórico entregue pela Meta passa a ser importado (migration 9453) ----
+--
+-- Colunas de andamento em `channel_session_meta_signup` (9452). Aditivo e idempotente.
+
+alter table public.channel_session_meta_signup
+  add column if not exists historico_progresso smallint
+    check (historico_progresso is null or historico_progresso between 0 and 100),
+  add column if not exists historico_mensagens integer not null default 0
+    check (historico_mensagens >= 0),
+  add column if not exists historico_concluido_em timestamptz,
+  add column if not exists historico_erro text,
+  add column if not exists historico_atualizado_em timestamptz;
+
+comment on column public.channel_session_meta_signup.historico_progresso is
+  'Último percentual (0-100) que a Meta informou para o histórico da coexistência. Só sobe.';
+comment on column public.channel_session_meta_signup.historico_mensagens is
+  'Mensagens do histórico da coexistência que já estão no CRM para este número (contadas em messages).';
+comment on column public.channel_session_meta_signup.historico_erro is
+  'Por que o histórico parou (recusa do dono do número, janela de 24 h vencida…). Sem conteúdo de conversa.';
+
+notify pgrst, 'reload schema';

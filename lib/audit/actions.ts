@@ -399,6 +399,10 @@ export const AUDIT_ACTIONS = [
   // de `channel.connected` para a trilha dizer POR QUAL PORTA o número entrou; o
   // modo (número novo | coexistência) vai no metadata. Nunca token, code nem PIN.
   "channel.official_connected_signup",
+  // O histórico de conversas da coexistência terminou de chegar (a Meta informou
+  // 100%). Uma vez por número; o metadata leva só contagens — nunca conteúdo,
+  // telefone ou nome de cliente.
+  "channel.official_history_synced",
   // Toggle de pausa por canal: desligado não entra na inbox (quarentena), mas
   // continua listado — diferente de `archived`, que exclui. Duas ações para a
   // trilha dizer nos dois sentidos, como `archived`/`reactivated`.

@@ -100,10 +100,22 @@ afterEach(() => {
 
 type Props = Parameters<typeof FormularioDaMeta>[0];
 
+type Filho = { type: unknown; props: Record<string, unknown> };
+
+/**
+ * A página devolve um fragmento com os DOIS formulários (o do app e o do Embedded
+ * Signup, #4074). Cada um é uma fronteira servidor → navegador: os dois são
+ * conferidos, e `propsDaPagina` devolve as do formulário do app.
+ */
+async function filhosDaPagina(): Promise<Filho[]> {
+  const raiz = (await Page()) as { props: { children: Filho | Filho[] } };
+  return Array.isArray(raiz.props.children) ? raiz.props.children : [raiz.props.children];
+}
+
 async function propsDaPagina(): Promise<Props> {
-  const elemento = (await Page()) as { type: unknown; props: Props };
-  expect(elemento.type).toBe(FormularioDaMeta);
-  return elemento.props;
+  const elemento = (await filhosDaPagina()).find((f) => f.type === FormularioDaMeta);
+  expect(elemento, "a página não renderiza o FormularioDaMeta").toBeDefined();
+  return elemento!.props as Props;
 }
 
 describe("/admin/meta — o que a página entrega ao navegador", () => {
@@ -116,7 +128,9 @@ describe("/admin/meta — o que a página entrega ao navegador", () => {
     };
 
     const props = await propsDaPagina();
-    const payload = JSON.stringify(props);
+    // O payload é o da PÁGINA INTEIRA: o formulário do Embedded Signup também
+    // atravessa a fronteira, e ele recebe só o booleano "há segredo salvo".
+    const payload = JSON.stringify((await filhosDaPagina()).map((f) => f.props));
 
     for (const segredo of [CIFRA_DO_SEGREDO, CIFRA_DO_TOKEN, SEGREDO_DO_ENV, TOKEN_DO_ENV]) {
       expect(payload, `a página entregou ${segredo} ao navegador`).not.toContain(segredo);

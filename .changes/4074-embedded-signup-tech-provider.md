@@ -17,7 +17,13 @@ confirma —, sem copiar token nenhum.
   celular enquanto o CRM também o usa. As mensagens que a empresa manda pelo
   aplicativo e os contatos da agenda do celular entram no CRM. Ao conectar, o CRM
   também pede à Meta o histórico das conversas, que ela só aceita pedir uma vez e
-  em até 24 horas; a importação desse histórico para o CRM ainda não está pronta.
+  em até 24 horas, e importa o que ela entregar: as conversas antigas aparecem na
+  caixa de entrada **encerradas e sem dono**, como passado, sem acordar o agente,
+  sem abrir atendimento nem notificar ninguém. Quem pediu para ser apagado (LGPD)
+  não volta. Em **Conexões › API Oficial** a tela mostra o andamento e, se a Meta
+  não entregar (o dono do número não aceitou compartilhar no celular, por exemplo),
+  diz o motivo. Só imagem e áudio trazem o arquivo; vídeo, documento e figurinha
+  entram só como registro.
 - **Vários números por empresa.** A conexão oficial deixa de assumir um número só:
   cada número é uma conexão própria, reconectar o mesmo número reaproveita a linha,
   e a tela lista todos.
@@ -38,5 +44,6 @@ números, coexistência sem registrar o número — têm teste automatizado; o q
 devolve de fato (validade do token, o número em coexistência) é conferido ao conectar
 o primeiro número de teste.
 
-Migration 9452 (aditiva): colunas novas em `platform_meta_app` e as tabelas
-`organization_meta_access` e `channel_session_meta_signup`, ambas só do servidor.
+Migrations 9452 e 9453 (aditivas): colunas novas em `platform_meta_app`, as tabelas
+`organization_meta_access` e `channel_session_meta_signup`, ambas só do servidor, e as
+colunas de andamento do histórico nesta última.
