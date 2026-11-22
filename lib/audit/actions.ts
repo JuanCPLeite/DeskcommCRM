@@ -395,6 +395,10 @@ export const AUDIT_ACTIONS = [
   // `lib/channels/reactivate.ts` — o único caminho de volta, e é o que faz a
   // frase acima valer para os DOIS casos em vez de para o que lembraram.
   "channel.reactivated",
+  // Número oficial conectado pela janela da Meta (Embedded Signup, #4074). Separada
+  // de `channel.connected` para a trilha dizer POR QUAL PORTA o número entrou; o
+  // modo (número novo | coexistência) vai no metadata. Nunca token, code nem PIN.
+  "channel.official_connected_signup",
   // Toggle de pausa por canal: desligado não entra na inbox (quarentena), mas
   // continua listado — diferente de `archived`, que exclui. Duas ações para a
   // trilha dizer nos dois sentidos, como `archived`/`reactivated`.
@@ -658,6 +662,12 @@ export const AUDIT_ACTIONS = [
   // verificação de URL que estava valendo até alguém colar o valor novo na Meta.
   "platform_meta_app.updated",
   "platform_meta_app.verify_token_rotated",
+  // app_id/config_id do Embedded Signup e o padrão de liberação (migration 9452).
+  // São identificadores públicos; mesmo assim a trilha guarda só QUAIS campos mudaram.
+  "platform_meta_app.signup_updated",
+  // Liberação do canal oficial por empresa (Embedded Signup, coexistência, teto de
+  // números). Tem `organization_id`: a mudança é DE UMA empresa.
+  "organization_meta_access.updated",
   // A conexão da ORGANIZAÇÃO com a conta de anúncios (migration 0213).
   // Auditável porque o token gravado aqui escreve conversões na conta de
   // mídia do cliente: "quem apontou minhas vendas para este destino?" só tem

@@ -42,13 +42,28 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!authz.ok) return authz.response;
   const orgId = authz.org.orgId;
 
+  // Com vários números por empresa (#4074), "a sessão oficial da empresa" deixa de
+  // ser uma só: `maybeSingle()` sobre duas linhas devolve erro, e o "tentar de novo"
+  // diria `no_meta_channel` para quem tem dois números conectados. O corpo PODE
+  // nomear a sessão; sem ele vale a mais antiga — o comportamento de sempre. O id
+  // do corpo só ESTREITA a busca já filtrada por `organization_id`: nunca a amplia.
+  const corpo = (await req.json().catch(() => null)) as { channel_session_id?: unknown } | null;
+  const alvo =
+    typeof corpo?.channel_session_id === "string" && /^[0-9a-f-]{36}$/i.test(corpo.channel_session_id)
+      ? corpo.channel_session_id
+      : null;
+
   const admin = createAdminClient();
-  const consultar = () =>
-    admin
+  const consultar = () => {
+    const base = admin
       .from("channel_sessions")
       .select(COLUNAS)
       .eq("organization_id", orgId)
       .eq("provider", CHANNEL_PROVIDER_META);
+    return (alvo ? base.eq("id", alvo) : base)
+      .order("created_at", { ascending: true })
+      .limit(1);
+  };
 
   // Só a sessão VIVA: reaplicar o webhook de um canal arquivado apontaria a Meta para
   // uma URL cujo `webhook_path_token` já foi rotacionado — ou seja, registraria uma

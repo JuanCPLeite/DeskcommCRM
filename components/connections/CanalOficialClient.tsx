@@ -16,6 +16,7 @@ import {
 import { copyToClipboard } from "@/lib/clipboard";
 import { useT } from "@/hooks/i18n/useT";
 import { ChannelAiAccess } from "./ChannelAiAccess";
+import { EmbeddedSignupCard } from "./EmbeddedSignupCard";
 import { ParaIntegrar } from "./ParaIntegrar";
 
 /** Campo somente-leitura com botão de copiar — o que o operador cola na Meta. */
@@ -84,6 +85,29 @@ export function CanalOficialClient() {
 
   return (
     <div className="flex flex-col gap-4" data-testid="canal-oficial-root">
+      <EmbeddedSignupCard />
+      {/* Mais de um número oficial (#4074): o cartão abaixo descreve só o primeiro,
+          e os demais não teriam onde aparecer. Com um número só, nada muda. */}
+      {estado?.numeros && estado.numeros.length > 1 ? (
+        <Card className="flex flex-col gap-2 p-4" data-testid="numeros-oficiais">
+          <h2 className="font-medium">
+            {t("Números conectados")} ({estado.numeros.length})
+          </h2>
+          <ul className="flex flex-col gap-1.5">
+            {estado.numeros.map((n) => (
+              <li key={n.id} className="flex flex-wrap items-center gap-2 text-sm" data-testid="numero-oficial">
+                <span className="font-medium">{n.displayName ?? t("Canal oficial")}</span>
+                {n.phoneNumber ? (
+                  <Badge variant="outline" className="font-mono text-xs">
+                    {n.phoneNumber}
+                  </Badge>
+                ) : null}
+                <Badge>{n.status ?? "—"}</Badge>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
       {estado?.connected ? (
         <Card className="p-4" data-testid="canal-conectado">
           <div className="flex flex-wrap items-center gap-2">

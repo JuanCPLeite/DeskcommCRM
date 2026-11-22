@@ -100,7 +100,10 @@ function canalOficial(over: Linha = {}): Linha {
     organization_id: ORG,
     provider: CHANNEL_PROVIDER_META,
     waha_session_name: null,
-    meta_phone_number_id: "999",
+    // O MESMO número que o POST do teste manda (`CORPO`, abaixo): com vários números por
+    // empresa (#4074) a rota reaproveita a linha pelo NÚMERO, não por "a única linha
+    // oficial da org". A intenção do teste — reconectar não duplica — segue de pé.
+    meta_phone_number_id: "1234567890",
     meta_token_encrypted: null,
     display_name: "Canal oficial",
     phone_number: null,

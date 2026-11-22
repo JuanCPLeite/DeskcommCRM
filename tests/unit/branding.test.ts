@@ -991,6 +991,11 @@ const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
     motivo:
       "endpoint da Graph API do WhatsApp Cloud — 6 arquivos: envio de template, sincronização de modelos, validação de credencial, conversões e insights. É contrato da Meta, não escolha nossa.",
   },
+  "connect.facebook.net": {
+    categoria: "FORNECEDOR",
+    motivo:
+      "SDK de JavaScript do Facebook, carregado no navegador por `components/connections/EmbeddedSignupCard.tsx` — é o único jeito de abrir a janela do Embedded Signup da Meta (#4074). Só é pedido quando a empresa abre a conexão pela Meta; sem app cadastrado na instalação o cartão nem é renderizado. Contrato da Meta, não escolha nossa.",
+  },
   "api.telegram.org": {
     categoria: "FORNECEDOR",
     motivo:

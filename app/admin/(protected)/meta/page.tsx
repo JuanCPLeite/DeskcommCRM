@@ -2,11 +2,13 @@ import { notFound } from "next/navigation";
 
 import { loadAuthUser } from "@/lib/auth/server";
 import { appDaMetaDoAmbiente } from "@/lib/channels/meta/app";
+import { signupDaMeta } from "@/lib/channels/meta/signup-config";
 import { tagDeIdioma } from "@/lib/i18n/datas";
 import type { Idioma } from "@/lib/i18n/idiomas";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 import { FormularioDaMeta } from "./_form";
+import { FormularioDoSignupDaMeta } from "./_signup-form";
 
 export const metadata = { title: "API Oficial da Meta da instalação" };
 export const dynamic = "force-dynamic";
@@ -67,17 +69,33 @@ export default async function Page() {
   // arquivo abre a tela vazia e conclui que o canal oficial não recebe nada.
   const doAmbiente = appDaMetaDoAmbiente();
 
+  // Os identificadores do Embedded Signup (9452) — consulta PRÓPRIA, pelo mesmo
+  // motivo de `lerDesfechoDoWebhook`: num banco anterior à migration o select
+  // inteiro voltaria 42703, e a tela perderia o App Secret e o token por causa de
+  // um EXTRA. `signupDaMeta()` já degrada para o `.env` sem lançar.
+  const signup = await signupDaMeta();
+
   return (
-    <FormularioDaMeta
-      temSegredoSalvo={Boolean(linha?.app_secret_encrypted)}
-      temTokenSalvo={Boolean(linha?.verify_token_encrypted)}
-      tokenGeradoEm={formatar(linha?.verify_token_created_at ?? null, usuario.idioma)}
-      atualizadoEm={formatar(linha?.updated_at ?? null, usuario.idioma)}
-      temNoAmbiente={Boolean(doAmbiente.appSecret && doAmbiente.verifyToken)}
-      // Leitura que falhou não pode virar "nunca configurado": essa frase
-      // levaria o dono a gerar um token por cima do que já está colado na Meta.
-      leituraFalhou={Boolean(error)}
-    />
+    <>
+      <FormularioDaMeta
+        temSegredoSalvo={Boolean(linha?.app_secret_encrypted)}
+        temTokenSalvo={Boolean(linha?.verify_token_encrypted)}
+        tokenGeradoEm={formatar(linha?.verify_token_created_at ?? null, usuario.idioma)}
+        atualizadoEm={formatar(linha?.updated_at ?? null, usuario.idioma)}
+        temNoAmbiente={Boolean(doAmbiente.appSecret && doAmbiente.verifyToken)}
+        // Leitura que falhou não pode virar "nunca configurado": essa frase
+        // levaria o dono a gerar um token por cima do que já está colado na Meta.
+        leituraFalhou={Boolean(error)}
+      />
+      <FormularioDoSignupDaMeta
+        appId={signup.appId ?? ""}
+        configId={signup.configId ?? ""}
+        configIdCoexistencia={signup.configIdCoexistencia ?? ""}
+        liberadoPorPadrao={signup.liberadoPorPadrao}
+        temSegredoSalvo={Boolean(linha?.app_secret_encrypted) || Boolean(doAmbiente.appSecret)}
+        leituraFalhou={Boolean(error)}
+      />
+    </>
   );
 }
 

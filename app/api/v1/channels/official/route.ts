@@ -37,6 +37,12 @@ import {
   lerOrigemDaConexao,
   registrarOrigemDaConexao,
 } from "@/lib/channels/meta/origem-da-conexao";
+import {
+  MENSAGEM_DO_TETO_DA_EMPRESA,
+  acessoDaEmpresa,
+  cabeMaisUmNumero,
+} from "@/lib/channels/meta/acesso-da-empresa";
+import { contarNumerosAtivos, listarNumerosOficiais } from "@/lib/channels/meta/numeros-da-empresa";
 import { validateMetaCredentials } from "@/lib/channels/meta/validate-credentials";
 import {
   COLUNAS_DO_DESFECHO_DO_WEBHOOK,
@@ -137,16 +143,25 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   // de excluir — e oferecia "Trocar credencial" onde deveria oferecer "Conectar".
   // O POST, ao contrário, PRECISA enxergar a linha arquivada: é ela que ele
   // ressuscita.
+  //
+  // `order` + `limit(1)`: com o Embedded Signup (#4074) a empresa pode ter MAIS DE
+  // UM número oficial. `maybeSingle()` sobre duas linhas devolve erro (PGRST116) e
+  // `data: null` — a tela diria "desconectado" para uma empresa com dois números
+  // funcionando. Esta rota segue descrevendo UMA conexão (a mais antiga, como
+  // `metaSessionForOrg`); a lista inteira vai em `numeros`, logo abaixo.
   const consultar = () =>
     admin
       .from("channel_sessions")
       .select("id, meta_phone_number_id, meta_waba_id, meta_token_encrypted, phone_number, display_name, webhook_path_token, status")
       .eq("organization_id", orgId)
-      .eq("provider", CHANNEL_PROVIDER_META);
+      .eq("provider", CHANNEL_PROVIDER_META)
+      .order("created_at", { ascending: true })
+      .limit(1);
   const { data } = await queryTolerantToMissingArchived(
     () => consultar().is(ARCHIVED_AT, null).maybeSingle(),
     () => consultar().maybeSingle(),
   );
+  const numeros = await listarNumerosOficiais(admin, orgId);
 
   const base = basePublicaDoWebhookMeta(req);
   const desfecho = data?.id ? await lerDesfechoDoWebhook(admin, orgId, data.id) : null;
@@ -157,6 +172,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     : null;
   return ok({
     connected: Boolean(data),
+    /**
+     * TODOS os números oficiais ativos da empresa (#4074). Os campos abaixo
+     * (`displayName`, `phoneNumberId`…) continuam descrevendo só o primeiro, para
+     * não quebrar quem lê o formato antigo.
+     */
+    numeros,
     channel_session_id: data?.id ?? null,
     // `hasToken` em vez do token: uma vez gravado, a tela mostra que EXISTE, nunca
     // qual é. Devolver o segredo para preencher o campo seria vazá-lo a cada render.
@@ -269,12 +290,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // que este POST precisa achar para trazer de volta. Ignorá-lo criaria uma
   // SEGUNDA linha oficial na org — e a linha velha continuaria segurando o par
   // (org, número) na trava da 0106.
+  //
+  // A busca é pelo NÚMERO (`meta_phone_number_id`), e não por "a sessão oficial da
+  // empresa": com vários números por empresa (#4074) essa segunda leitura devolveria
+  // erro (PGRST116) em vez de uma linha, e a rota criaria uma duplicata do número
+  // que o operador só queria reconectar. Número diferente = número NOVO.
   const buscarExistente = (colunas: string) =>
     admin
       .from("channel_sessions")
       .select(colunas)
       .eq("organization_id", orgId)
       .eq("provider", CHANNEL_PROVIDER_META)
+      .eq("meta_phone_number_id", phone_number_id)
       .maybeSingle();
   const { data: existenteRaw } = await queryTolerantToMissingArchived(
     () => buscarExistente(`id, ${ARCHIVED_AT}, webhook_path_token, display_name`),
@@ -286,6 +313,24 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     webhook_path_token?: string | null;
     display_name?: string | null;
   } | null;
+
+  // O teto de números DESTA empresa (`organization_meta_access.max_numeros`), em
+  // cima do limite do plano (que o gatilho do banco aplica mais abaixo): o menor
+  // dos dois manda. Só vale para número que ocupa uma vaga NOVA — reconectar o
+  // mesmo número, ou trocar a credencial dele, não pode ser barrado por um teto
+  // que ele já cabe. `acessoDaEmpresa` falha FECHADO, mas aqui só o teto importa e
+  // ele falha ABERTO para nulo (= só o plano): a porta manual existe desde antes
+  // do Embedded Signup e não passa a depender de uma tabela nova.
+  if (!existente || existente.archived_at) {
+    const acesso = await acessoDaEmpresa(orgId);
+    const ativos = await contarNumerosAtivos(admin, orgId);
+    if (ativos !== null && !cabeMaisUmNumero(acesso, ativos)) {
+      return fail("limite_da_empresa", t(MENSAGEM_DO_TETO_DA_EMPRESA), 409, {
+        requestId,
+        details: { ativos, max_numeros: acesso.maxNumeros },
+      });
+    }
+  }
 
   const linha = {
     organization_id: orgId,

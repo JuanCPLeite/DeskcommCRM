@@ -132,6 +132,9 @@ function canal(provider: string): Record<string, unknown> {
     provider,
     display_name: "Nome do provedor",
     webhook_path_token: "tok123456789",
+    // O canal oficial é reaproveitado pelo NÚMERO (#4074: a empresa pode ter vários);
+    // é o número que o `salvar` do caminho "canal oficial" posta.
+    ...(provider === CHANNEL_PROVIDER_META ? { meta_phone_number_id: "1234567" } : {}),
     archived_at: null,
     status: "WORKING",
     created_at: "2026-10-01T00:00:00.000Z",

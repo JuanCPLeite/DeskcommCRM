@@ -58,6 +58,10 @@ vi.mock("@/lib/supabase/admin", () => {
     select: () => cadeiaDoCanal,
     eq: () => cadeiaDoCanal,
     is: () => cadeiaDoCanal,
+    // A rota descreve a conexão MAIS ANTIGA (`order` + `limit(1)`): com vários números
+    // por empresa (#4074) `maybeSingle()` sobre duas linhas devolveria erro.
+    order: () => cadeiaDoCanal,
+    limit: () => cadeiaDoCanal,
     maybeSingle: async () => ({ data: canal, error: null }),
   };
   return {

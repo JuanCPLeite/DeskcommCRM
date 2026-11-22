@@ -107,6 +107,14 @@ function makeDb(opts: { sessions?: Linha[]; recusaColunaDoDesfecho?: boolean } =
       this.filtros.push([col, val]);
       return this;
     }
+    // A rota pega a sessão MAIS ANTIGA (`order` + `limit(1)`): com vários números por
+    // empresa (#4074) `maybeSingle()` sobre duas linhas devolveria erro.
+    order(): this {
+      return this;
+    }
+    limit(): this {
+      return this;
+    }
     maybeSingle(): this {
       this.unica = true;
       return this;

@@ -4,8 +4,24 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { apiClient } from "@/lib/api/client";
 
+/** Um número oficial ativo da empresa (#4074: pode haver mais de um). Sem token. */
+export interface NumeroOficial {
+  id: string;
+  displayName: string | null;
+  phoneNumber: string | null;
+  status: string | null;
+  phoneNumberId: string | null;
+  wabaId: string | null;
+}
+
 export interface OfficialChannelState {
   channel_session_id?: string | null;
+  /**
+   * TODOS os números oficiais ativos. Os campos abaixo (`displayName`,
+   * `phoneNumberId`…) descrevem só o primeiro. Opcional: servidor anterior ao
+   * Embedded Signup não o manda, e a tela cai no cartão único de sempre.
+   */
+  numeros?: NumeroOficial[];
   connected: boolean;
   /** Existe token gravado? O token em si NUNCA volta — ver a rota. */
   hasToken: boolean;
