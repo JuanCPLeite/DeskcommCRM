@@ -14,8 +14,10 @@ próprio número numa janela da Meta — entra com o Facebook, escolhe o número
 confirma —, sem copiar token nenhum.
 
 - **Coexistência.** O cliente mantém o número no aplicativo WhatsApp Business do
-  celular enquanto o CRM também o usa. Ao conectar, o CRM pede à Meta a
-  sincronização dos contatos e do histórico — a Meta dá 24 horas para isso.
+  celular enquanto o CRM também o usa. As mensagens que a empresa manda pelo
+  aplicativo e os contatos da agenda do celular entram no CRM. Ao conectar, o CRM
+  também pede à Meta o histórico das conversas, que ela só aceita pedir uma vez e
+  em até 24 horas; a importação desse histórico para o CRM ainda não está pronta.
 - **Vários números por empresa.** A conexão oficial deixa de assumir um número só:
   cada número é uma conexão própria, reconectar o mesmo número reaproveita a linha,
   e a tela lista todos.

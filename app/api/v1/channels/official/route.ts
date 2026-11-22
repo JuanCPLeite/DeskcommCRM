@@ -218,6 +218,16 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
             "message_template_status_update",
             "smb_message_echoes",
             "smb_app_state_sync",
+            // Exigidos pela Meta para a coexistência (onboarding de usuários do app
+            // WhatsApp Business): `account_update` avisa do estado da conta e
+            // `history` carrega o histórico que `sincronizarCoexistencia` pede.
+            //
+            // ⚠️ O CRM RECEBE e DESCARTA os dois (`lib/channels/meta/webhook.ts` só
+            // reconhece `messages`, os dois `smb_*` e o status de modelo): o histórico
+            // das conversas antigas ainda NÃO é importado. Assinar é necessário para a
+            // Meta aceitar o pedido de sincronização; importar é trabalho à parte.
+            "account_update",
+            "history",
           ],
         }
       : null,
