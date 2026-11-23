@@ -20,3 +20,10 @@ lembretes da agenda e avisos de caso podem apontar para ele.
 
 **Ação do operador:** o agendador ganhou uma linha, então a imagem do `scheduler` precisa
 ser atualizada junto com a do app. Na instalação padrão, o `update.sh` já faz isso.
+
+**Avisos mesmo sem webhook.** A mesma rodada de 10 em 10 minutos compara o que a Meta
+responde com a última resposta e abre na Central o aviso que o webhook abriria: modelo que
+mudou de categoria (utilidade ↔ marketing), de qualidade ou de status (reprovado, pausado,
+desativado), e número cuja qualidade ou limite de envio mudou. O aviso não repete se o
+webhook já o abriu. Na primeira consulta de um número o CRM só registra o estado, sem
+abrir aviso. O botão Sincronizar também passa a abrir esses avisos.

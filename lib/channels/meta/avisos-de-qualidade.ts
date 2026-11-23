@@ -71,7 +71,10 @@ function limiteLegivel(limite: string | null): string | null {
   return LIMITES[l.toUpperCase()] ?? null;
 }
 
-const EVENTOS_DO_NUMERO: Record<string, { rotulo: string; severity: SeveridadeDoAviso; frase: string }> = {
+const EVENTOS_DO_NUMERO: Record<
+  string,
+  { rotulo: string; severity: SeveridadeDoAviso; frase: string }
+> = {
   DOWNGRADE: {
     rotulo: "qualidade caiu",
     severity: "warn",
@@ -110,7 +113,11 @@ export function avisoDeQualidadeDoNumero(ev: QualidadeDoNumeroEvento): AvisoDeQu
     kind: "channel_number_alert",
     severity: desfecho.severity,
     title: `Número ${alvo}: ${desfecho.rotulo}${limite ? ` (limite: ${limite})` : ""}`,
-    body: [desfecho.frase, limite ? `Limite atual: ${limite}.` : null, "Confira em Conexões › API Oficial."]
+    body: [
+      desfecho.frase,
+      limite ? `Limite atual: ${limite}.` : null,
+      "Confira em Conexões › API Oficial.",
+    ]
       .filter((l): l is string => !!l)
       .join(" "),
   };
@@ -175,7 +182,12 @@ const QUALIDADES: Record<string, { rotulo: string; severity: SeveridadeDoAviso }
 };
 
 function qualidade(q: string | null) {
-  return QUALIDADES[(STR(q) ?? "UNKNOWN").toUpperCase()] ?? { rotulo: (STR(q) ?? "desconhecida").toLowerCase(), severity: "info" as const };
+  return (
+    QUALIDADES[(STR(q) ?? "UNKNOWN").toUpperCase()] ?? {
+      rotulo: (STR(q) ?? "desconhecida").toLowerCase(),
+      severity: "info" as const,
+    }
+  );
 }
 
 export function avisoDeQualidadeDoModelo(ev: QualidadeDoModeloEvento): AvisoDeQualidade | null {
@@ -263,4 +275,75 @@ export async function gravarAvisoDeQualidade(
     });
     return "aviso_falhou";
   }
+}
+
+// ─── Número: por CONSULTA (a rede de segurança do webhook) ─────────────────
+
+export interface QualidadeDoNumeroConsultada {
+  telefone: string | null;
+  qualidadeAntes: string | null;
+  qualidadeAgora: string | null;
+  limiteAntes: string | null;
+  limiteAgora: string | null;
+}
+
+const QUALIDADES_DO_NUMERO: Record<
+  string,
+  { rotulo: string; ordem: number; severity: SeveridadeDoAviso }
+> = {
+  GREEN: { rotulo: "alta", ordem: 3, severity: "info" },
+  YELLOW: { rotulo: "média", ordem: 2, severity: "warn" },
+  RED: { rotulo: "baixa", ordem: 1, severity: "critical" },
+};
+
+const ORDEM_DOS_LIMITES = [
+  "TIER_50",
+  "TIER_250",
+  "TIER_1K",
+  "TIER_2K",
+  "TIER_10K",
+  "TIER_100K",
+  "TIER_UNLIMITED",
+];
+
+/**
+ * O aviso de quando o CRM PERGUNTA à Meta e a resposta é diferente da última vez — o
+ * mesmo assunto do webhook \`phone_number_quality_update\`, para o caso em que ele não
+ * chega. Sem "antes" (primeira consulta) não há mudança: o chamador só registra.
+ */
+export function avisoDeQualidadeDoNumeroConsultada(
+  c: QualidadeDoNumeroConsultada,
+): AvisoDeQualidade | null {
+  const antes = QUALIDADES_DO_NUMERO[(c.qualidadeAntes ?? "").toUpperCase()];
+  const agora = QUALIDADES_DO_NUMERO[(c.qualidadeAgora ?? "").toUpperCase()];
+  const qualidadeMudou = !!antes && !!agora && antes.rotulo !== agora.rotulo;
+
+  const iAntes = ORDEM_DOS_LIMITES.indexOf((c.limiteAntes ?? "").toUpperCase());
+  const iAgora = ORDEM_DOS_LIMITES.indexOf((c.limiteAgora ?? "").toUpperCase());
+  const limiteMudou = iAntes >= 0 && iAgora >= 0 && iAntes !== iAgora;
+
+  if (!qualidadeMudou && !limiteMudou) return null;
+
+  const alvo = STR(c.telefone) ?? "do canal oficial";
+  const caiu = (qualidadeMudou && agora!.ordem < antes!.ordem) || (limiteMudou && iAgora < iAntes);
+  const partes: string[] = [];
+  if (qualidadeMudou) partes.push(`qualidade ${antes!.rotulo} → ${agora!.rotulo}`);
+  if (limiteMudou) {
+    partes.push(
+      `limite ${limiteLegivel(c.limiteAntes) ?? c.limiteAntes} → ${limiteLegivel(c.limiteAgora) ?? c.limiteAgora}`,
+    );
+  }
+  const severity: SeveridadeDoAviso =
+    qualidadeMudou && agora!.ordem === 1 ? "critical" : caiu ? "warn" : "info";
+  return {
+    kind: "channel_number_alert",
+    severity,
+    title: `Número ${alvo}: ${partes.join(", ")}`,
+    body: [
+      caiu
+        ? "A Meta rebaixou o número (muitos bloqueios ou denúncias costumam ser a causa). Reduza disparos e revise os textos antes que ele seja limitado."
+        : "A Meta melhorou a avaliação do número.",
+      "Confira em Conexões › API Oficial.",
+    ].join(" "),
+  };
 }

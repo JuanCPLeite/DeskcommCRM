@@ -30,6 +30,11 @@ import { logger } from "@/lib/logger";
 
 import { CHANNEL_PROVIDER_META } from "../capabilities";
 
+import {
+  abrirAvisosDasMudancasDosModelos,
+  consultarQualidadeDoNumero,
+  verificarQualidadeDoNumero,
+} from "./avisos-por-consulta";
 import { resolveMetaCreds } from "./credentials";
 import { syncTemplates } from "./template-sync";
 
@@ -64,7 +69,7 @@ export async function ressincronizarModelosDaWaba(
     // lista e o token de um deles vale para a conta inteira.
     const { data: canal } = await admin
       .from("channel_sessions")
-      .select("meta_phone_number_id")
+      .select("id, meta_phone_number_id")
       .eq("organization_id", alvo.organizationId)
       .eq("meta_waba_id", alvo.wabaId)
       .is("archived_at", null)
@@ -73,6 +78,7 @@ export async function ressincronizarModelosDaWaba(
       .maybeSingle();
     const phoneNumberId = canal?.meta_phone_number_id as string | undefined;
     if (!phoneNumberId) return "sem_canal";
+    const canalId = canal?.id as string;
 
     const creds = await resolveMetaCreds(admin, {
       organizationId: alvo.organizationId,
@@ -85,6 +91,12 @@ export async function ressincronizarModelosDaWaba(
       wabaId: alvo.wabaId,
       token: creds.token,
       graphVersion: creds.graphVersion,
+      // O que mudou em modelo já espelhado vira aviso na Central, igual ao webhook faria.
+      aoMudar: abrirAvisosDasMudancasDosModelos(
+        admin,
+        { organizationId: alvo.organizationId, channelSessionId: canalId },
+        alvo.wabaId,
+      ),
     });
     return "sincronizado";
   } catch (erro) {
@@ -105,6 +117,9 @@ export interface ResumoDaRodada {
   sincronizadas: number;
   semCredencial: number;
   falhas: number;
+  /** Números consultados e quantos geraram aviso (qualidade/limite mudou). */
+  numeros: number;
+  avisosDeNumero: number;
 }
 
 /**
@@ -119,7 +134,7 @@ export async function ressincronizarTodasAsWabas(
 ): Promise<ResumoDaRodada> {
   const { data } = await admin
     .from("channel_sessions")
-    .select("organization_id, meta_waba_id")
+    .select("id, organization_id, meta_waba_id, meta_phone_number_id, metadata")
     .eq("provider", CHANNEL_PROVIDER_META)
     .is("archived_at", null)
     .not("meta_waba_id", "is", null)
@@ -127,21 +142,78 @@ export async function ressincronizarTodasAsWabas(
 
   // Uma conta pode ter vários números: uma varredura por (organização, conta).
   const contas = new Map<string, { organizationId: string; wabaId: string }>();
-  for (const linha of (data ?? []) as Array<{ organization_id: string; meta_waba_id: string }>) {
+  const numeros: Array<{
+    id: string;
+    organizationId: string;
+    phoneNumberId: string;
+    metadata: Record<string, unknown> | null;
+  }> = [];
+  for (const linha of (data ?? []) as Array<{
+    id: string;
+    organization_id: string;
+    meta_waba_id: string;
+    meta_phone_number_id: string | null;
+    metadata: Record<string, unknown> | null;
+  }>) {
     if (orgsParadas.has(linha.organization_id)) continue;
+    if (linha.meta_phone_number_id) {
+      numeros.push({
+        id: linha.id,
+        organizationId: linha.organization_id,
+        phoneNumberId: linha.meta_phone_number_id,
+        metadata: linha.metadata,
+      });
+    }
     contas.set(`${linha.organization_id}:${linha.meta_waba_id}`, {
       organizationId: linha.organization_id,
       wabaId: linha.meta_waba_id,
     });
   }
 
-  const resumo: ResumoDaRodada = { contas: 0, sincronizadas: 0, semCredencial: 0, falhas: 0 };
+  const resumo: ResumoDaRodada = {
+    contas: 0,
+    sincronizadas: 0,
+    semCredencial: 0,
+    falhas: 0,
+    numeros: 0,
+    avisosDeNumero: 0,
+  };
   for (const conta of [...contas.values()].slice(0, LIMITE_DE_CONTAS_POR_RODADA)) {
     resumo.contas += 1;
     const desfecho = await ressincronizarModelosDaWaba(admin, conta, { ignorarTrava: true });
     if (desfecho === "sincronizado") resumo.sincronizadas += 1;
     else if (desfecho === "sem_credencial") resumo.semCredencial += 1;
     else if (desfecho === "falhou") resumo.falhas += 1;
+  }
+
+  // A qualidade e o limite de cada NÚMERO: o webhook `phone_number_quality_update` avisa em
+  // segundos quando chega; aqui o CRM pergunta, compara com a última resposta e avisa.
+  for (const numero of numeros.slice(0, LIMITE_DE_CONTAS_POR_RODADA * 4)) {
+    try {
+      const creds = await resolveMetaCreds(admin, {
+        organizationId: numero.organizationId,
+        phoneNumberId: numero.phoneNumberId,
+      });
+      if (!creds) continue;
+      const agora = await consultarQualidadeDoNumero({
+        phoneNumberId: numero.phoneNumberId,
+        token: creds.token,
+        graphVersion: creds.graphVersion,
+      });
+      if (!agora) continue;
+      resumo.numeros += 1;
+      const desfecho = await verificarQualidadeDoNumero(
+        admin,
+        { id: numero.id, organizationId: numero.organizationId, metadata: numero.metadata },
+        agora,
+      );
+      if (desfecho === "avisou") resumo.avisosDeNumero += 1;
+    } catch (erro) {
+      logger.error("[modelos.ressincronizar] número não consultado", {
+        channel_session_id: numero.id,
+        erro: erro instanceof Error ? erro.message : String(erro),
+      });
+    }
   }
   return resumo;
 }

@@ -51,6 +51,8 @@ describe("ressincronizar os modelos da conta", () => {
       wabaId: "waba-1",
       token: "t",
       graphVersion: "v22.0",
+      // O que mudar em modelo já espelhado vira aviso na Central.
+      aoMudar: expect.any(Function),
     });
   });
 
@@ -144,7 +146,10 @@ describe("o cron respeita a organização parada", () => {
       { organization_id: "org-parada", meta_waba_id: "waba-1" },
       { organization_id: "org-ativa", meta_waba_id: "waba-2" },
     ];
-    const r = await ressincronizarTodasAsWabas(bancoFalso({ canais, canal: "n" }), new Set(["org-parada"]));
+    const r = await ressincronizarTodasAsWabas(
+      bancoFalso({ canais, canal: "n" }),
+      new Set(["org-parada"]),
+    );
     expect(r.contas).toBe(1);
     expect(h.sync).toHaveBeenCalledTimes(1);
     expect(h.sync.mock.calls[0]![0]).toMatchObject({ organizationId: "org-ativa" });

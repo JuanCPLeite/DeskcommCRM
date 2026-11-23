@@ -13,6 +13,7 @@
  * `fetch`, lê o que existe, escreve. Toda a decisão perigosa (o que desabilitar) mora
  * no lado puro, que é testável contra a fixture real; a casca não decide nada.
  */
+import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 import { hashContract } from "./contract-hash";
@@ -64,6 +65,51 @@ export interface LocalTemplate {
   language: string;
   status: string;
   contract_hash: string;
+  /** Só a detecção de mudança lê estes três; o plano não precisa deles. */
+  category?: string | null;
+  quality_score?: string | null;
+  rejected_reason?: string | null;
+}
+
+/** O que mudou num modelo que JÁ estava no espelho — a matéria-prima dos avisos. */
+export interface MudancaDeModelo {
+  name: string;
+  language: string;
+  status: { de: string; para: string; motivo: string | null } | null;
+  categoria: { de: string | null; para: string } | null;
+  qualidade: { de: string | null; para: string } | null;
+}
+
+/**
+ * Compara a Meta com o espelho e devolve SÓ o que mudou em modelo que já existia.
+ * Modelo novo não é mudança (não há "antes"), e modelo que sumiu é tratado à parte
+ * (`planSync`). Puro: quem avisa é o chamador.
+ */
+export function mudancasDosModelos(
+  rows: MetaTemplateRow[],
+  existing: LocalTemplate[],
+): MudancaDeModelo[] {
+  const local = new Map(existing.map((e) => [key(e), e]));
+  const out: MudancaDeModelo[] = [];
+  for (const r of rows) {
+    const antes = local.get(key(r));
+    if (!antes) continue;
+    const status =
+      antes.status !== r.status
+        ? { de: antes.status, para: r.status, motivo: r.rejected_reason }
+        : null;
+    const categoria =
+      r.category && (antes.category ?? null) !== r.category
+        ? { de: antes.category ?? null, para: r.category }
+        : null;
+    const qualidade =
+      r.quality_score && (antes.quality_score ?? null) !== r.quality_score
+        ? { de: antes.quality_score ?? null, para: r.quality_score }
+        : null;
+    if (status || categoria || qualidade)
+      out.push({ name: r.name, language: r.language, status, categoria, qualidade });
+  }
+  return out;
 }
 
 export interface TemplateKey {
@@ -213,6 +259,11 @@ export interface SyncInput {
    * É a VERSÃO que vai na base; o HOST vem do knob da instalação.
    */
   graphVersion: string;
+  /**
+   * Chamado DEPOIS de gravar, com o que mudou em modelo já espelhado. É por aqui que o
+   * cron e o webhook abrem os avisos. Falha dele NUNCA derruba a sincronização.
+   */
+  aoMudar?: (mudancas: MudancaDeModelo[]) => Promise<void>;
 }
 
 const FIELDS =
@@ -262,7 +313,7 @@ export async function syncTemplates(input: SyncInput): Promise<SyncCounts> {
 
   const { data: existing, error: readError } = await db
     .from("meta_templates")
-    .select("name, language, status, contract_hash")
+    .select("name, language, status, contract_hash, category, quality_score, rejected_reason")
     .eq("organization_id", input.organizationId)
     .eq("waba_id", input.wabaId);
   if (readError) throw new Error(`syncTemplates: leitura do espelho falhou — ${readError.message}`);
@@ -271,12 +322,10 @@ export async function syncTemplates(input: SyncInput): Promise<SyncCounts> {
   const now = new Date().toISOString();
 
   if (rows.length > 0) {
-    const { error } = await db
-      .from("meta_templates")
-      .upsert(
-        rows.map((r) => ({ ...r, synced_at: now, updated_at: now })),
-        { onConflict: "organization_id,waba_id,name,language" },
-      );
+    const { error } = await db.from("meta_templates").upsert(
+      rows.map((r) => ({ ...r, synced_at: now, updated_at: now })),
+      { onConflict: "organization_id,waba_id,name,language" },
+    );
     if (error) throw new Error(`syncTemplates: upsert falhou — ${error.message}`);
   }
 
@@ -289,6 +338,20 @@ export async function syncTemplates(input: SyncInput): Promise<SyncCounts> {
       .eq("name", alvo.name)
       .eq("language", alvo.language);
     if (error) throw new Error(`syncTemplates: marcação DISABLED falhou — ${error.message}`);
+  }
+
+  if (input.aoMudar) {
+    try {
+      const mudancas = mudancasDosModelos(rows, (existing ?? []) as LocalTemplate[]);
+      if (mudancas.length > 0) await input.aoMudar(mudancas);
+    } catch (erro) {
+      // O espelho já está gravado: aviso que falha não desfaz nem derruba a sincronização.
+      logger.error("[template-sync] aviso das mudanças não aberto", {
+        organization_id: input.organizationId,
+        waba_id: input.wabaId,
+        erro: erro instanceof Error ? erro.message : String(erro),
+      });
+    }
   }
 
   return plano.counts;

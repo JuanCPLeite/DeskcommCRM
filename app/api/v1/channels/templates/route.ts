@@ -46,6 +46,7 @@ import { normalizeRejectedReason } from "@/lib/channels/meta/webhook";
 import { deriveTemplateContract, describeAddress } from "@/lib/channels/meta/template-contract";
 import { slotKey } from "@/lib/channels/meta/build-components";
 import { textPreviews } from "@/lib/channels/meta/previa-do-modelo";
+import { abrirAvisosDasMudancasDosModelos } from "@/lib/channels/meta/avisos-por-consulta";
 import { syncTemplates } from "@/lib/channels/meta/template-sync";
 import { mesclarValoresSalvos } from "@/lib/channels/meta/valores-salvos";
 import { erroDePermissaoDeGestao, recusaDeConteudoDoModelo } from "@/lib/channels/templates-graph";
@@ -393,6 +394,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       wabaId: sessao.wabaId,
       token: creds.token,
       graphVersion: creds.graphVersion,
+      // Quem clica em Sincronizar também absorve mudanças: elas viram aviso na Central.
+      aoMudar: abrirAvisosDasMudancasDosModelos(
+        createAdminClient(),
+        { organizationId: r.orgId, channelSessionId: sessao.id },
+        sessao.wabaId,
+      ),
     });
     return ok(counts);
   } catch (err) {
