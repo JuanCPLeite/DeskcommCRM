@@ -12,7 +12,7 @@ Agora o CRM refaz a lista da conta sozinho:
 
 - **Em segundos**, quando a Meta avisa por webhook (status, categoria, qualidade ou
   conteúdo do modelo). O CRM passa a pedir também o campo `message_template_components_update`.
-- **De hora em hora**, pelo agendador, como rede de segurança para o aviso que a Meta não
+- **De 10 em 10 minutos**, pelo agendador, como rede de segurança para o aviso que a Meta não
   entregou. O cron novo é `modelos-oficiais-sync`; ele respeita organização suspensa.
 
 O modelo apagado na Meta continua marcado como desativado em vez de sumir, porque

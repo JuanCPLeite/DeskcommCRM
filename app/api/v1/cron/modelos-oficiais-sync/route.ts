@@ -2,7 +2,7 @@
  * modelos-oficiais-sync — refaz o espelho dos modelos de cada conta oficial.
  *
  * O webhook já refaz o espelho em segundos quando a Meta avisa. Este cron é a rede de
- * segurança de hora em hora: cobre o evento que não chegou (webhook fora do ar, conta
+ * segurança de 10 em 10 minutos: cobre o evento que não chegou (webhook fora do ar, conta
  * com callback de outro sistema) e o modelo apagado na Meta. Só consulta a Graph API;
  * não envia nada a ninguém.
  *

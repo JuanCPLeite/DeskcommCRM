@@ -83,9 +83,9 @@ CRONS="
 # terceiro o acesso cuja conversa encerrou (ou cujo contato foi anonimizado).
 */5 * * * *|60|api/v1/cron/mcp-oauth-revogacao
 */5 * * * *|45|api/v1/cron/channel-health
-# O espelho dos modelos oficiais, de hora em hora: o webhook refaz em segundos, e este
+# O espelho dos modelos oficiais, de 10 em 10 minutos: o webhook refaz em segundos, e este
 # cobre o evento que a Meta não entregou e o modelo apagado fora do CRM.
-17 * * * *|120|api/v1/cron/modelos-oficiais-sync
+*/10 * * * *|120|api/v1/cron/modelos-oficiais-sync
 # A JANELA DE MANUTENÇÃO (#2388). Minuto a minuto porque o que ela decide é a
 # borda de um horário ESCOLHIDO POR UMA PESSOA: perder a abertura ou a retomada
 # por causa de uma varredura a cada 5 minutos seria o defeito inteiro. Barata:

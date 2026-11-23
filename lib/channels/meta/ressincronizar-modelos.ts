@@ -11,7 +11,7 @@
  *
  *   1. o webhook, a cada evento de modelo da conta (status, categoria, qualidade,
  *      conteúdo) — segundos depois da mudança;
- *   2. o cron `modelos-oficiais-sync`, de hora em hora — a rede de segurança para o
+ *   2. o cron `modelos-oficiais-sync`, de 10 em 10 minutos — a rede de segurança para o
  *      evento que a Meta não entregou.
  *
  * ─── O que ela garante ─────────────────────────────────────────────────────
@@ -108,8 +108,8 @@ export interface ResumoDaRodada {
 }
 
 /**
- * A rede de segurança: refaz o espelho de TODAS as contas oficiais ativas. Roda de hora
- * em hora (cron `modelos-oficiais-sync`) e cobre o evento que a Meta não entregou — ou
+ * A rede de segurança: refaz o espelho de TODAS as contas oficiais ativas. Roda de 10 em 10 minutos
+ * (cron `modelos-oficiais-sync`) e cobre o evento que a Meta não entregou — ou
  * o que foi para o callback de outro sistema. Ignora a trava de rajada de propósito.
  */
 export async function ressincronizarTodasAsWabas(
