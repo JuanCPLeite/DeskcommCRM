@@ -111,6 +111,14 @@ export interface TemplateCategoryEvent {
 }
 
 /** A qualidade do MODELO mudou (`message_template_quality_update`): GREEN / YELLOW / RED. */
+/** O conteúdo de um modelo mudou na Meta (`message_template_components_update`): criado/editado fora do CRM. */
+export interface TemplateContentEvent {
+  kind: "template_content";
+  wabaId: string;
+  templateName: string;
+  templateLanguage: string;
+}
+
 export interface TemplateQualityEvent {
   kind: "template_quality";
   wabaId: string;
@@ -335,6 +343,7 @@ export type MetaWebhookEvent =
   | PhoneQualityEvent
   | TemplateCategoryEvent
   | TemplateQualityEvent
+  | TemplateContentEvent
   | MessageStatusEvent
   | InboundMessageEvent
   | OutboundEchoEvent
@@ -476,6 +485,13 @@ export function parseMetaWebhook(envelope: MetaWebhookEnvelope): MetaWebhookEven
           // `correct_category` é o que a Meta passa a cobrar quando ela mesma corrige.
           newCategory: str(v.new_category) ?? str(v.correct_category),
         });
+        continue;
+      }
+      if (change.field === "message_template_components_update") {
+        const name = str(v.message_template_name);
+        const language = str(v.message_template_language);
+        if (!name || !language) continue;
+        out.push({ kind: "template_content", wabaId, templateName: name, templateLanguage: language });
         continue;
       }
       if (change.field === "message_template_quality_update") {

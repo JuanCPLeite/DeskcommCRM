@@ -60,6 +60,7 @@ import {
   type ApagadosNoLote,
 } from "@/lib/channels/meta/titular-apagado";
 import { logger } from "@/lib/logger";
+import { ressincronizarModelosDaWaba } from "@/lib/channels/meta/ressincronizar-modelos";
 import {
   emitirFalhaDeEntrega,
   telefoneDoEmbed,
@@ -203,10 +204,30 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
   let puladosPorTitularApagado = 0;
   let puladosPorContatoAnonimizado = 0;
 
+  /** Contas cujo espelho de modelos precisa ser refeito depois do lote (uma vez cada). */
+  const wabasParaRessincronizar = new Set<string>();
+
   for (const e of eventos) {
     // O evento chega carimbado com a WABA; se não for a desta sessão, ignoramos.
     // Confiar no `entry.id` para escolher a org seria aceitar o corpo como fonte.
     if (session.wabaId && e.wabaId && e.wabaId !== session.wabaId) continue;
+
+    // Qualquer evento de modelo da conta pede o espelho refeito: criado, editado ou
+    // apagado fora do CRM só aparece assim, sem ninguém clicar em Sincronizar.
+    if (
+      e.wabaId &&
+      (e.kind === "template_status" ||
+        e.kind === "template_category" ||
+        e.kind === "template_quality" ||
+        e.kind === "template_content")
+    ) {
+      wabasParaRessincronizar.add(e.wabaId);
+    }
+
+    if (e.kind === "template_content") {
+      desfechos.push("modelo_conteudo");
+      continue;
+    }
 
     if (e.kind === "inbound_message") {
       // A metade que faltava: mensagem do contato vira linha no inbox, move lead,
@@ -528,6 +549,13 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
         .eq("organization_id", session.organizationId)
         .eq("external_id", e.externalId);
     }
+  }
+
+  // Refaz o espelho dos modelos das contas que mexeram. Sem await: a Meta espera o 200
+  // e a varredura da Graph API não é da conta dela. `ressincronizarModelosDaWaba` não
+  // lança e tem trava contra rajada.
+  for (const wabaId of wabasParaRessincronizar) {
+    void ressincronizarModelosDaWaba(admin, { organizationId: session.organizationId, wabaId });
   }
 
   // O que ficou de fora por LGPD NÃO pode sumir em silêncio: a rota responde 200

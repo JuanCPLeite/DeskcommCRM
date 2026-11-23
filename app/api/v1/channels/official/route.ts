@@ -234,6 +234,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
             "phone_number_quality_update",
             "message_template_quality_update",
             "template_category_update",
+            // Conteúdo do modelo mudou na Meta (criado/editado fora do CRM): refaz o espelho.
+            "message_template_components_update",
           ],
         }
       : null,
