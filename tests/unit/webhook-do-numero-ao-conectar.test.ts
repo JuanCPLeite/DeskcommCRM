@@ -279,6 +279,12 @@ describe("registrarWebhookDoNumero — a conversa com a Meta, na ordem certa", (
     // e o override sozinho daria a impressão de canal pronto.
     expect(chamadas).toHaveLength(2);
     expect(chamadas[0]!.url).toBe(`https://graph.facebook.com/${VERSION}/${WABA}/subscribed_apps`);
+    // O override da CONTA também aponta para o CRM: sem ele, os eventos de modelo
+    // (status, qualidade, categoria) iriam para o callback do app.
+    expect(chamadas[0]!.corpo).toEqual({
+      override_callback_uri: `${BASE}/api/v1/webhooks/meta/${PATH_TOKEN}`,
+      verify_token: VERIFY,
+    });
     expect(chamadas[1]!.url).toBe(`https://graph.facebook.com/${VERSION}/${NUMERO}`);
     expect(chamadas[1]!.corpo).toEqual({
       webhook_configuration: {

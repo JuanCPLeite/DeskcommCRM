@@ -27,4 +27,9 @@ Também nesta entrega:
 `template_category_update`. Sem a assinatura, nenhum aviso novo chega. Em
 conexões novas o CRM já pede esses campos; as existentes precisam da assinatura manual.
 
+Ao conectar um número, o CRM também registra o webhook no nível da **conta** (WABA) da
+empresa. Sem isso, os eventos de modelo e de qualidade iam para o callback do app da Meta —
+que numa instalação com o app compartilhado pode ser de outro sistema. Só aquela conta é
+afetada. Contas já conectadas passam a ter o override ao reconectar ("Registrar de novo").
+
 Sem migration: os avisos reaproveitam tipos de aviso que já existem na Central.

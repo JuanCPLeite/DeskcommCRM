@@ -98,7 +98,10 @@ export async function registrarWebhookDoNumero(input: {
   const inscricao = await postNaGraph(
     `${graphBaseUrl()}/${input.wabaId}/subscribed_apps`,
     input.token,
-    {},
+    // O override da CONTA: modelos (status, qualidade, categoria) e alertas são eventos
+    // de WABA e, sem ele, vão para o callback do APP (que pode ser de outro sistema).
+    // Só vale para esta WABA — outra conta do mesmo app não é tocada.
+    { override_callback_uri: input.callbackUrl, verify_token: input.verifyToken },
   );
   if (!inscricao.ok) {
     return { ok: false, etapa: "inscricao_na_waba", motivo: motivoDoErro(inscricao) };
