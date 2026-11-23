@@ -45,6 +45,7 @@ import { metaCloudTemplateOps } from "@/lib/channels/meta/templates";
 import { normalizeRejectedReason } from "@/lib/channels/meta/webhook";
 import { deriveTemplateContract, describeAddress } from "@/lib/channels/meta/template-contract";
 import { slotKey } from "@/lib/channels/meta/build-components";
+import { textPreviews } from "@/lib/channels/meta/previa-do-modelo";
 import { syncTemplates } from "@/lib/channels/meta/template-sync";
 import { mesclarValoresSalvos } from "@/lib/channels/meta/valores-salvos";
 import { erroDePermissaoDeGestao, recusaDeConteudoDoModelo } from "@/lib/channels/templates-graph";
@@ -105,28 +106,6 @@ export interface TemplateView {
   daConexao: boolean;
   /** A conta (WABA) a que o modelo pertence — o que a tela usa para filtrar por conexão. */
   wabaId: string | null;
-}
-
-/** Textos com placeholder, achatados (inclui os de dentro de card de carrossel). */
-function textPreviews(components: unknown): Array<{ onde: string; text: string }> {
-  const out: Array<{ onde: string; text: string }> = [];
-  const visita = (lista: unknown, prefixo: string) => {
-    if (!Array.isArray(lista)) return;
-    for (const c of lista as Array<Record<string, unknown>>) {
-      const tipo = String(c.type ?? "").toUpperCase();
-      if (Array.isArray(c.cards)) {
-        (c.cards as Array<Record<string, unknown>>).forEach((card, i) =>
-          visita(card.components, `card ${i + 1} › `),
-        );
-        continue;
-      }
-      const texto = typeof c.text === "string" ? c.text : "";
-      if (!texto.includes("{{")) continue;
-      out.push({ onde: `${prefixo}${tipo === "HEADER" ? "cabeçalho" : "corpo"}`, text: texto });
-    }
-  };
-  visita(components, "");
-  return out;
 }
 
 type OrgGate =

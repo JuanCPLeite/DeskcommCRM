@@ -97,6 +97,8 @@ vi.mock("@/hooks/channels/useTemplates", () => ({
       },
     },
   }),
+  // Helper puro do hook real: a tela monta a URL com ele, então o mock precisa tê-lo.
+  consultaDaConexao: (id?: string | null) => (id ? `?channel_session_id=${encodeURIComponent(id)}` : ""),
   useSyncTemplates: () => ({ mutateAsync: h.sync, isPending: false }),
   useSaveTemplateValues: () => ({ mutate: h.salvar, isPending: false }),
 }));
