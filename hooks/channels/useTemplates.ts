@@ -41,6 +41,8 @@ export interface TemplateView {
   savedValues: Record<string, string>;
   /** Da conta oficial desta conexão: só estes têm Editar/Apagar (o espelho é da organização). */
   daConexao: boolean;
+  /** A conta (WABA) do modelo — o que a tela usa para filtrar por conexão. */
+  wabaId?: string | null;
 }
 
 export interface TemplatesPayload {
@@ -56,10 +58,18 @@ export interface SyncCounts {
   disabled: number;
 }
 
-export function useTemplates() {
+/** `?channel_session_id=` — qual conexão oficial a rota usa (empresa com vários números). */
+export function consultaDaConexao(sessionId?: string | null): string {
+  return sessionId ? `?channel_session_id=${encodeURIComponent(sessionId)}` : "";
+}
+
+export function useTemplates(sessionId?: string | null) {
   return useQuery({
-    queryKey: ["channel-templates"],
-    queryFn: async () => apiClient.get<{ data: TemplatesPayload }>("/api/v1/channels/templates"),
+    // O prefixo `channel-templates` é o que as invalidações usam; o segundo item
+    // separa o cache de cada conexão.
+    queryKey: ["channel-templates", sessionId ?? "primeira"],
+    queryFn: async () =>
+      apiClient.get<{ data: TemplatesPayload }>(`/api/v1/channels/templates${consultaDaConexao(sessionId)}`),
     staleTime: 30_000,
   });
 }
@@ -67,7 +77,8 @@ export function useTemplates() {
 export function useSyncTemplates() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async () => apiClient.post<{ data: SyncCounts }>("/api/v1/channels/templates", {}),
+    mutationFn: async (sessionId?: string | null) =>
+      apiClient.post<{ data: SyncCounts }>(`/api/v1/channels/templates${consultaDaConexao(sessionId)}`, {}),
     onError: showApiError,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["channel-templates"] });

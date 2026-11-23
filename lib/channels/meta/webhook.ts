@@ -91,6 +91,37 @@ export interface TemplateStatusEvent {
   reason: string | null;
 }
 
+/** A qualidade do NÚMERO mudou (`phone_number_quality_update`): rebaixado, sinalizado, limite novo. */
+export interface PhoneQualityEvent {
+  kind: "phone_quality";
+  wabaId: string;
+  /** `display_phone_number` como a Meta manda — o evento NÃO traz o `phone_number_id`. */
+  displayPhone: string | null;
+  event: string;
+  /** `current_limit`: `TIER_1K`, `TIER_10K`, `TIER_UNLIMITED`… */
+  currentLimit: string | null;
+}
+
+/** A Meta RECATEGORIZOU um modelo (`message_template_category_update`): utility ↔ marketing. */
+export interface TemplateCategoryEvent {
+  kind: "template_category";
+  wabaId: string;
+  templateName: string;
+  templateLanguage: string;
+  previousCategory: string | null;
+  newCategory: string | null;
+}
+
+/** A qualidade do MODELO mudou (`message_template_quality_update`): GREEN / YELLOW / RED. */
+export interface TemplateQualityEvent {
+  kind: "template_quality";
+  wabaId: string;
+  templateName: string;
+  templateLanguage: string;
+  previousQuality: string | null;
+  newQuality: string | null;
+}
+
 /**
  * Mensagem ENVIADA PELO CONTATO. A metade que faltava do canal: sem ela o oficial
  * é um megafone — o cliente responde e nada chega, nenhum lead se move, o agente não
@@ -303,6 +334,9 @@ export interface HistoryChunkEvent {
 
 export type MetaWebhookEvent =
   | TemplateStatusEvent
+  | PhoneQualityEvent
+  | TemplateCategoryEvent
+  | TemplateQualityEvent
   | MessageStatusEvent
   | InboundMessageEvent
   | OutboundEchoEvent
@@ -418,6 +452,50 @@ export function parseMetaWebhook(envelope: MetaWebhookEnvelope): MetaWebhookEven
           templateLanguage: language,
           event: str(v.event) ?? "UNKNOWN",
           reason: normalizeRejectedReason(v.reason),
+        });
+        continue;
+      }
+
+      // Qualidade e categoria: eventos de CONTA, entregues em segundos. Sem nome de
+      // modelo (ou sem `event` no número) o payload é capenga e não vira aviso.
+      if (change.field === "message_template_category_update") {
+        const name = str(v.message_template_name);
+        const language = str(v.message_template_language);
+        if (!name || !language) continue;
+        out.push({
+          kind: "template_category",
+          wabaId,
+          templateName: name,
+          templateLanguage: language,
+          previousCategory: str(v.previous_category),
+          // `correct_category` é o que a Meta passa a cobrar quando ela mesma corrige.
+          newCategory: str(v.new_category) ?? str(v.correct_category),
+        });
+        continue;
+      }
+      if (change.field === "message_template_quality_update") {
+        const name = str(v.message_template_name);
+        const language = str(v.message_template_language);
+        if (!name || !language) continue;
+        out.push({
+          kind: "template_quality",
+          wabaId,
+          templateName: name,
+          templateLanguage: language,
+          previousQuality: str(v.previous_quality_score),
+          newQuality: str(v.new_quality_score),
+        });
+        continue;
+      }
+      if (change.field === "phone_number_quality_update") {
+        const event = str(v.event);
+        if (!event) continue;
+        out.push({
+          kind: "phone_quality",
+          wabaId,
+          displayPhone: str(v.display_phone_number),
+          event,
+          currentLimit: str(v.current_limit),
         });
         continue;
       }

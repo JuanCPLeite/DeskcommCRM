@@ -103,6 +103,8 @@ export interface TemplateView {
    * aparece na lista, mas editar/apagar aqui miraria a WABA oficial pelo nome.
    */
   daConexao: boolean;
+  /** A conta (WABA) a que o modelo pertence — o que a tela usa para filtrar por conexão. */
+  wabaId: string | null;
 }
 
 /** Textos com placeholder, achatados (inclui os de dentro de card de carrossel). */
@@ -152,12 +154,13 @@ async function orgOrFail(requestId: string, papel: "agent" | "admin"): Promise<O
   return { autorizado: true, orgId: authz.org.orgId, userId: authz.user.id, idioma: authz.user.idioma };
 }
 
-export async function GET(): Promise<NextResponse> {
+export async function GET(req?: NextRequest): Promise<NextResponse> {
   const requestId = randomUUID();
   const r = await orgOrFail(requestId, "agent");
   if (!r.autorizado) return r.resposta;
 
-  const sessao = await metaSessionForOrg(r.orgId);
+  // A conexão escolhida na tela (empresa com vários números). Sem ela, a mais antiga.
+  const sessao = await metaSessionForOrg(r.orgId, req?.nextUrl.searchParams.get("channel_session_id") ?? null);
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("meta_templates")
@@ -214,6 +217,7 @@ export async function GET(): Promise<NextResponse> {
       // A mesma régua de `linhasDoModeloNaConexao`: linha oficial = sem conexão
       // e com a WABA desta sessão.
       daConexao: !!sessao?.wabaId && row.channel_session_id === null && row.waba_id === sessao.wabaId,
+      wabaId: row.waba_id ?? null,
     };
   });
 
@@ -255,7 +259,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!r.autorizado) return r.resposta;
   const t = (texto: string) => traduzir(texto, r.idioma);
 
-  const sessao = await metaSessionForOrg(r.orgId);
+  const sessao = await metaSessionForOrg(r.orgId, req.nextUrl.searchParams.get("channel_session_id"));
   if (!sessao?.wabaId) {
     return fail("invalid_request", "no_meta_channel", 400, { requestId });
   }

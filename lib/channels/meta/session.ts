@@ -90,10 +90,16 @@ export async function metaSessionByWebhookToken(
  */
 export async function metaSessionForOrg(
   organizationId: string,
+  /**
+   * Uma conexão específica, quando a empresa tem mais de uma (#4074). Sem ele, a mais
+   * antiga — o comportamento de sempre. Id que não é DESTA organização não casa
+   * linha: devolve `null`, nunca a sessão de outra empresa.
+   */
+  sessionId?: string | null,
 ): Promise<MetaSessaoDaOrg | null> {
   const admin = createAdminClient();
-  const base = () =>
-    admin
+  const base = () => {
+    const q = admin
       .from("channel_sessions")
       // `meta_phone_number_id` entra na seleção porque é a segunda metade da chave da
       // credencial (`organization_id` + ele): sem o número, quem chama não tem como
@@ -104,6 +110,8 @@ export async function metaSessionForOrg(
       .eq("provider", CHANNEL_PROVIDER_META)
       .order("created_at", { ascending: true })
       .limit(1);
+    return sessionId ? q.eq("id", sessionId) : q;
+  };
   const { data } = await queryTolerantToMissingArchived(
     () => base().is(ARCHIVED_AT, null).maybeSingle(),
     () => base().maybeSingle(),

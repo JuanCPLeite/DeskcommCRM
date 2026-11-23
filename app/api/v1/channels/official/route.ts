@@ -228,6 +228,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
             // Meta aceitar o pedido de sincronização; importar é trabalho à parte.
             "account_update",
             "history",
+            // Avisos em tempo quase real na Central: qualidade do número, qualidade
+            // do modelo e mudança de categoria (utility ↔ marketing). O CRM atualiza o
+            // espelho do modelo e abre o aviso (`lib/channels/meta/avisos-de-qualidade.ts`).
+            "phone_number_quality_update",
+            "message_template_quality_update",
+            "message_template_category_update",
           ],
         }
       : null,

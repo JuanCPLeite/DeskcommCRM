@@ -9,7 +9,9 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { DialogoDeApagarModelo, type AlvoDoApagamento } from "./DialogoDeApagarModelo";
 import { FormularioDaDefinicao, type CorpoDoModelo, type ModeloEmEdicao } from "./FormularioDaDefinicao";
+import { useOfficialChannel } from "@/hooks/channels/useOfficialChannel";
 import {
+  consultaDaConexao,
   useSaveTemplateValues,
   useSyncTemplates,
   useTemplates,
@@ -146,7 +148,13 @@ function LinkDaMidia({ tpl, slot }: { tpl: TemplateView; slot: TemplateSlotView 
 
 export function TemplatesClient() {
   const t = useT();
-  const { data, isPending } = useTemplates();
+  // Empresa com VÁRIOS números oficiais: qual conexão a tela mostra e gerencia.
+  // `null` = a mais antiga (o comportamento de sempre) — e é o que quem tem um
+  // número só continua vendo, sem seletor nenhum.
+  const [conexaoId, setConexaoId] = useState<string | null>(null);
+  const oficial = useOfficialChannel();
+  const numeros = oficial.data?.data.numeros ?? [];
+  const { data, isPending } = useTemplates(conexaoId);
   const sync = useSyncTemplates();
   const qc = useQueryClient();
 
@@ -163,7 +171,11 @@ export function TemplatesClient() {
   const formulario = useRef<HTMLDivElement>(null);
 
   const waba = data?.data.waba ?? null;
-  const templates = data?.data.templates ?? null;
+  // Com uma conexão escolhida, só os modelos da CONTA dela (o espelho é da organização
+  // inteira, e o do parceiro e o de outra conta apareceriam misturados).
+  const templates = conexaoId
+    ? (data?.data.templates.filter((x) => x.wabaId === waba) ?? null)
+    : (data?.data.templates ?? null);
 
   /** As duas listas que leem o espelho: o seletor do inbox e o construtor de fluxo. */
   function invalidarEspelho() {
@@ -174,7 +186,10 @@ export function TemplatesClient() {
 
   const gestao = useMutation({
     mutationFn: (corpo: CorpoDoModelo) =>
-      apiClient.post<{ data: Record<string, number> }>("/api/v1/channels/templates", corpo),
+      apiClient.post<{ data: Record<string, number> }>(
+        `/api/v1/channels/templates${consultaDaConexao(conexaoId)}`,
+        corpo,
+      ),
     onSuccess: (_r, corpo) => {
       invalidarEspelho();
       toast.success(
@@ -193,7 +208,7 @@ export function TemplatesClient() {
 
   const apagar = useMutation({
     mutationFn: (v: { alvo: AlvoDoApagamento; confirmado: boolean }) =>
-      apiClient.post<{ data: Record<string, number> }>("/api/v1/channels/templates", {
+      apiClient.post<{ data: Record<string, number> }>(`/api/v1/channels/templates${consultaDaConexao(conexaoId)}`, {
         acao: "apagar",
         name: v.alvo.name,
         language: v.alvo.language,
@@ -228,7 +243,7 @@ export function TemplatesClient() {
   };
 
   async function sincronizar() {
-    const res = await sync.mutateAsync();
+    const res = await sync.mutateAsync(conexaoId);
     const { inserted, updated, disabled } = res.data;
     toast.success(
       `${t("Sincronizado:")} ${inserted} ${t("novo(s),")} ${updated} ${t("atualizado(s),")} ${disabled} ${t("desativado(s).")}`,
@@ -255,6 +270,29 @@ export function TemplatesClient() {
 
   return (
     <div className="flex flex-col gap-4" data-testid="templates-root">
+      {numeros.length > 1 ? (
+        <div className="flex flex-col gap-1" data-testid="seletor-de-numero-dos-modelos">
+          <label htmlFor="conexao-dos-modelos" className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            {t("Número")}
+          </label>
+          <select
+            id="conexao-dos-modelos"
+            className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm sm:w-auto sm:min-w-72 lg:h-9"
+            value={conexaoId ?? ""}
+            onChange={(e) => setConexaoId(e.target.value || null)}
+          >
+            <option value="">{t("Primeiro número (padrão)")}</option>
+            {numeros.map((n) => (
+              <option key={n.id} value={n.id}>
+                {[n.displayName ?? t("Canal oficial"), n.phoneNumber].filter(Boolean).join(" · ")}
+              </option>
+            ))}
+          </select>
+          <span className="text-xs text-muted-foreground">
+            {t("Os modelos pertencem à conta do WhatsApp Business: números da mesma conta compartilham a mesma lista.")}
+          </span>
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <p className="min-w-0 break-words text-sm text-muted-foreground">
           {t("Espelho da conta")} <span className="font-mono text-xs">{waba}</span> ·{" "}

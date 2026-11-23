@@ -16,6 +16,7 @@ import {
 import { copyToClipboard } from "@/lib/clipboard";
 import { useT } from "@/hooks/i18n/useT";
 import { ChannelAiAccess } from "./ChannelAiAccess";
+import { useEmbeddedSignupConfig } from "@/hooks/channels/useEmbeddedSignup";
 import { EmbeddedSignupCard } from "./EmbeddedSignupCard";
 import { ParaIntegrar } from "./ParaIntegrar";
 
@@ -34,7 +35,7 @@ function ParaColar({
   if (!valor) {
     return (
       <div className="flex flex-col gap-1">
-        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
           {rotulo}
         </span>
         {semValor}
@@ -43,11 +44,13 @@ function ParaColar({
   }
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
         {rotulo}
       </span>
       <div className="flex items-center gap-2">
-        <code className="min-w-0 flex-1 overflow-x-auto rounded-md bg-muted px-2 py-1.5 text-xs">{valor}</code>
+        <code className="min-w-0 flex-1 overflow-x-auto rounded-md bg-muted px-2 py-1.5 text-xs">
+          {valor}
+        </code>
         <Button
           size="sm"
           className="shrink-0"
@@ -69,6 +72,13 @@ export function CanalOficialClient() {
   const conectar = useConnectOfficialChannel();
   const registrarWebhook = useRegistrarWebhookOficial();
   const [form, setForm] = useState({ phone_number_id: "", waba_id: "", token: "" });
+  // Empresa liberada para conectar pela janela da Meta: os três campos manuais deixam
+  // de ser o caminho. Ficam atrás de "Avançado" (fechado) porque número conectado por
+  // token ainda precisa deles para trocar a credencial.
+  const signup = useEmbeddedSignupConfig();
+  const [avancadoAberto, setAvancadoAberto] = useState(false);
+  const signupLiberado = signup.data?.data.disponivel === true;
+  const mostrarFormulario = !signup.isPending && (!signupLiberado || avancadoAberto);
 
   const estado = data?.data;
 
@@ -95,7 +105,11 @@ export function CanalOficialClient() {
           </h2>
           <ul className="flex flex-col gap-1.5">
             {estado.numeros.map((n) => (
-              <li key={n.id} className="flex flex-wrap items-center gap-2 text-sm" data-testid="numero-oficial">
+              <li
+                key={n.id}
+                className="flex flex-wrap items-center gap-2 text-sm"
+                data-testid="numero-oficial"
+              >
                 <span className="font-medium">{n.displayName ?? t("Canal oficial")}</span>
                 {n.phoneNumber ? (
                   <Badge variant="outline" className="font-mono text-xs">
@@ -117,7 +131,11 @@ export function CanalOficialClient() {
             {(estado?.numeros ?? [])
               .filter((n) => n.historico)
               .map((n) => (
-                <li key={n.id} className="flex flex-col gap-0.5 text-sm" data-testid="historico-do-numero">
+                <li
+                  key={n.id}
+                  className="flex flex-col gap-0.5 text-sm"
+                  data-testid="historico-do-numero"
+                >
                   <span className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{n.displayName ?? t("Canal oficial")}</span>
                     {n.phoneNumber ? (
@@ -246,11 +264,15 @@ export function CanalOficialClient() {
               <span className="flex flex-col items-start gap-1">
                 {estado.webhook.verifyTokenOrigem === "instalacao" ? (
                   <span className="text-sm text-muted-foreground" data-testid="token-na-instalacao">
-                    {t("Já cadastrado na administração da instalação. Ele aparece uma vez só, quando é gerado — se não foi guardado, quem administra a instalação gera outro em Admin › API Oficial (Meta).")}
+                    {t(
+                      "Já cadastrado na administração da instalação. Ele aparece uma vez só, quando é gerado — se não foi guardado, quem administra a instalação gera outro em Admin › API Oficial (Meta).",
+                    )}
                   </span>
                 ) : (
                   <span className="text-sm text-destructive" data-testid="token-nao-configurado">
-                    {t("Ainda não configurado. Quem administra a instalação cadastra em Admin › API Oficial (Meta), e o token aparece lá pronto para copiar.")}
+                    {t(
+                      "Ainda não configurado. Quem administra a instalação cadastra em Admin › API Oficial (Meta), e o token aparece lá pronto para copiar.",
+                    )}
                   </span>
                 )}
                 {estado.webhook.configurarEm ? (
@@ -266,7 +288,7 @@ export function CanalOficialClient() {
             }
           />
           <div className="flex flex-col gap-1">
-            <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
               {t("Campos a assinar")}
             </span>
             <div className="flex flex-wrap gap-1">
@@ -304,70 +326,89 @@ export function CanalOficialClient() {
           aviso={
             <>
               {t("Um número tem um único webhook.")}{" "}
-              {t("Para operar em dois CRMs ao mesmo tempo, configure o reencaminhamento de mensagens.")}
+              {t(
+                "Para operar em dois CRMs ao mesmo tempo, configure o reencaminhamento de mensagens.",
+              )}
             </>
           }
         />
       ) : null}
 
-      <Card className="p-4">
-        <h2 className="font-medium">
-          {estado?.connected ? t("Trocar credencial") : t("Conectar canal oficial")}
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {t("Os três valores vêm do seu app na Meta (")}
-          <strong>WhatsApp → {t("Configuração da API")}</strong>
-          {t("). A credencial é")} <strong>{t("validada com a Meta antes de ser gravada")}</strong>
-          {t(" — se o número não responder, nada é salvo.")}
-        </p>
+      {signupLiberado ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="h-auto min-h-11 w-full py-2 text-center whitespace-normal sm:w-auto lg:min-h-9"
+          onClick={() => setAvancadoAberto((v) => !v)}
+          aria-expanded={avancadoAberto}
+          data-testid="btn-avancado-token-manual"
+        >
+          {avancadoAberto
+            ? t("Ocultar conexão por token manual")
+            : t("Avançado: conectar ou trocar credencial com token manual")}
+        </Button>
+      ) : null}
+      {mostrarFormulario ? (
+        <Card className="p-4">
+          <h2 className="font-medium">
+            {estado?.connected ? t("Trocar credencial") : t("Conectar canal oficial")}
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {t("Os três valores vêm do seu app na Meta (")}
+            <strong>WhatsApp → {t("Configuração da API")}</strong>
+            {t("). A credencial é")}{" "}
+            <strong>{t("validada com a Meta antes de ser gravada")}</strong>
+            {t(" — se o número não responder, nada é salvo.")}
+          </p>
 
-        <form onSubmit={enviar} className="mt-4 flex flex-col gap-3">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="pnid">{t("ID do número de telefone")}</Label>
-            <Input
-              id="pnid"
-              value={form.phone_number_id}
-              onChange={(e) => setForm((f) => ({ ...f, phone_number_id: e.target.value }))}
-              placeholder="1103328999528818"
-              required
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="waba">{t("ID da conta do WhatsApp Business")}</Label>
-            <Input
-              id="waba"
-              value={form.waba_id}
-              onChange={(e) => setForm((f) => ({ ...f, waba_id: e.target.value }))}
-              placeholder="2434045433735175"
-              required
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="tok">{t("Token de acesso")}</Label>
-            <Input
-              id="tok"
-              type="password"
-              value={form.token}
-              onChange={(e) => setForm((f) => ({ ...f, token: e.target.value }))}
-              placeholder={
-                estado?.hasToken ? t("•••• (já guardado — preencha para trocar)") : "EAAG…"
-              }
-              required
-            />
-            <span className="text-xs text-muted-foreground">
-              {t("Guardado cifrado. Não é exibido de volta em nenhum momento.")}
-            </span>
-          </div>
-          <Button
-            type="submit"
-            className="h-auto min-h-11 w-full whitespace-normal py-2 text-center sm:w-auto lg:min-h-9"
-            disabled={conectar.isPending}
-            data-testid="btn-conectar"
-          >
-            {conectar.isPending ? t("Validando com a Meta…") : t("Validar e conectar")}
-          </Button>
-        </form>
-      </Card>
+          <form onSubmit={enviar} className="mt-4 flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="pnid">{t("ID do número de telefone")}</Label>
+              <Input
+                id="pnid"
+                value={form.phone_number_id}
+                onChange={(e) => setForm((f) => ({ ...f, phone_number_id: e.target.value }))}
+                placeholder="1103328999528818"
+                required
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="waba">{t("ID da conta do WhatsApp Business")}</Label>
+              <Input
+                id="waba"
+                value={form.waba_id}
+                onChange={(e) => setForm((f) => ({ ...f, waba_id: e.target.value }))}
+                placeholder="2434045433735175"
+                required
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="tok">{t("Token de acesso")}</Label>
+              <Input
+                id="tok"
+                type="password"
+                value={form.token}
+                onChange={(e) => setForm((f) => ({ ...f, token: e.target.value }))}
+                placeholder={
+                  estado?.hasToken ? t("•••• (já guardado — preencha para trocar)") : "EAAG…"
+                }
+                required
+              />
+              <span className="text-xs text-muted-foreground">
+                {t("Guardado cifrado. Não é exibido de volta em nenhum momento.")}
+              </span>
+            </div>
+            <Button
+              type="submit"
+              className="h-auto min-h-11 w-full py-2 text-center whitespace-normal sm:w-auto lg:min-h-9"
+              disabled={conectar.isPending}
+              data-testid="btn-conectar"
+            >
+              {conectar.isPending ? t("Validando com a Meta…") : t("Validar e conectar")}
+            </Button>
+          </form>
+        </Card>
+      ) : null}
     </div>
   );
 }

@@ -32,6 +32,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import { comIdDaRequisicao, fail } from "@/lib/api/wrappers";
 import { appDaMeta } from "@/lib/channels/meta/app";
 import { avisarStatusDoModelo, desfechoDoAviso } from "@/lib/channels/meta/aviso-do-modelo";
+import {
+  avisoDeCategoriaDoModelo,
+  avisoDeQualidadeDoModelo,
+  avisoDeQualidadeDoNumero,
+  gravarAvisoDeQualidade,
+} from "@/lib/channels/meta/avisos-de-qualidade";
 import { lerEnvelopeMeta } from "@/lib/channels/meta/envelope";
 import {
   MOTIVO_DO_CONTRATO_VIOLADO,
@@ -338,6 +344,80 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
           phone_number_id: e.phoneNumberId,
         });
       }
+      continue;
+    }
+
+    // ── Qualidade e categoria: o aviso quase em tempo real ──────────────────
+    //
+    // O espelho (`meta_templates`) é atualizado ANTES do aviso, como no status:
+    // o empurrão não pode apontar para uma tela ainda velha. `gravarAvisoDeQualidade`
+    // não lança — falha dela não vira 5xx (a Meta reentregaria o mesmo evento).
+    if (e.kind === "template_category" || e.kind === "template_quality") {
+      const mudanca =
+        e.kind === "template_category"
+          ? { category: e.newCategory ?? undefined }
+          : { quality_score: e.newQuality ?? undefined };
+      const { data: espelhados, error: erroDoEspelho } = await admin
+        .from("meta_templates")
+        .update({ ...mudanca, updated_at: now })
+        .eq("organization_id", session.organizationId)
+        .eq("waba_id", e.wabaId)
+        .eq("name", e.templateName)
+        .eq("language", e.templateLanguage)
+        .select("id");
+      let desfecho = "modelo_nao_atualizado";
+      if (!erroDoEspelho && (espelhados?.length ?? 0) > 0) {
+        const aviso =
+          e.kind === "template_category"
+            ? avisoDeCategoriaDoModelo({
+                templateName: e.templateName,
+                templateLanguage: e.templateLanguage,
+                anterior: e.previousCategory,
+                nova: e.newCategory,
+              })
+            : avisoDeQualidadeDoModelo({
+                templateName: e.templateName,
+                templateLanguage: e.templateLanguage,
+                anterior: e.previousQuality,
+                nova: e.newQuality,
+              });
+        const r = await gravarAvisoDeQualidade(
+          admin,
+          { organizationId: session.organizationId, channelSessionId: session.id },
+          aviso,
+        );
+        desfecho = r === "sem_aviso" ? "modelo" : `modelo:${r}`;
+      }
+      desfechos.push(desfecho);
+      continue;
+    }
+    if (e.kind === "phone_quality") {
+      // O evento traz o telefone (não o `phone_number_id`): acha a conexão DESTA
+      // conta cujo número bate, para o aviso ir à conexão certa. Sem casar, cai
+      // na sessão que recebeu a entrega — a conta é a mesma, e o aviso nunca some.
+      const digitos = (e.displayPhone ?? "").replace(/\D/g, "");
+      let alvoId = session.id;
+      if (digitos) {
+        const { data: irmas } = await admin
+          .from("channel_sessions")
+          .select("id, phone_number")
+          .eq("organization_id", session.organizationId)
+          .eq("meta_waba_id", e.wabaId);
+        const casada = (irmas ?? []).find(
+          (s) => ((s.phone_number as string | null) ?? "").replace(/\D/g, "") === digitos,
+        );
+        if (casada) alvoId = casada.id as string;
+      }
+      const r = await gravarAvisoDeQualidade(
+        admin,
+        { organizationId: session.organizationId, channelSessionId: alvoId },
+        avisoDeQualidadeDoNumero({
+          telefone: e.displayPhone,
+          event: e.event,
+          limite: e.currentLimit,
+        }),
+      );
+      desfechos.push(r === "sem_aviso" ? "numero" : `numero:${r}`);
       continue;
     }
 
