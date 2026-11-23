@@ -18,7 +18,7 @@ function envelope(field: string, value: Record<string, unknown>) {
 describe("parser dos eventos de qualidade e categoria", () => {
   it("categoria do modelo", () => {
     const ev = parseMetaWebhook(
-      envelope("message_template_category_update", {
+      envelope("template_category_update", {
         message_template_name: "boas_vindas",
         message_template_language: "pt_BR",
         previous_category: "UTILITY",

@@ -24,7 +24,7 @@ Também nesta entrega:
 
 **Ação do operador:** no painel da Meta, em Webhooks do app, assine os campos
 `phone_number_quality_update`, `message_template_quality_update` e
-`message_template_category_update`. Sem a assinatura, nenhum aviso novo chega. Em
+`template_category_update`. Sem a assinatura, nenhum aviso novo chega. Em
 conexões novas o CRM já pede esses campos; as existentes precisam da assinatura manual.
 
 Sem migration: os avisos reaproveitam tipos de aviso que já existem na Central.

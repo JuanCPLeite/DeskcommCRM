@@ -233,7 +233,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
             // espelho do modelo e abre o aviso (`lib/channels/meta/avisos-de-qualidade.ts`).
             "phone_number_quality_update",
             "message_template_quality_update",
-            "message_template_category_update",
+            "template_category_update",
           ],
         }
       : null,

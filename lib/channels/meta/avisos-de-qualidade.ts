@@ -12,7 +12,7 @@
  *     limite de mensagens. Número sinalizado (FLAGGED) é o prenúncio de bloqueio.
  *   - `message_template_quality_update`: a qualidade do modelo mudou. Modelo que
  *     cai para baixa qualidade acaba pausado e a campanha que dependia dele não sai.
- *   - `message_template_category_update`: a Meta recategorizou o modelo. Mudar de
+ *   - `template_category_update`: a Meta recategorizou o modelo. Mudar de
  *     utility para marketing muda o PREÇO por mensagem e as regras de envio.
  *
  * ─── Mesmos trilhos do aviso de status, sem kind novo ──────────────────────

@@ -47,9 +47,7 @@ import type { MetaWebhookEnvelope } from "./envelope";
  */
 // O mesmo tipo que `lib/instalacao/ambiente.ts` usa para ler `.env`:
 // `NodeJS.ProcessEnv` exige `NODE_ENV` e obrigaria todo teste a montá-lo.
-export function metaPodeReceber(
-  source: Record<string, string | undefined> = process.env,
-): boolean {
+export function metaPodeReceber(source: Record<string, string | undefined> = process.env): boolean {
   const cheia = (nome: string): boolean => (source[nome] ?? "").trim() !== "";
   return cheia("META_WEBHOOK_VERIFY_TOKEN") && cheia("META_APP_SECRET");
 }
@@ -102,7 +100,7 @@ export interface PhoneQualityEvent {
   currentLimit: string | null;
 }
 
-/** A Meta RECATEGORIZOU um modelo (`message_template_category_update`): utility ↔ marketing. */
+/** A Meta RECATEGORIZOU um modelo (`template_category_update`): utility ↔ marketing. */
 export interface TemplateCategoryEvent {
   kind: "template_category";
   wabaId: string;
@@ -371,7 +369,9 @@ function str(v: unknown): string | null {
 
 /** Objeto simples (nem array, nem null) — a guarda para dado que vem do fio. */
 function objetoSimples(v: unknown): Record<string, unknown> | null {
-  return typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+  return typeof v === "object" && v !== null && !Array.isArray(v)
+    ? (v as Record<string, unknown>)
+    : null;
 }
 
 /** Rótulo do botão tocado: `button.text` (modelo) ou `interactive.button_reply|list_reply.title`. */
@@ -458,7 +458,12 @@ export function parseMetaWebhook(envelope: MetaWebhookEnvelope): MetaWebhookEven
 
       // Qualidade e categoria: eventos de CONTA, entregues em segundos. Sem nome de
       // modelo (ou sem `event` no número) o payload é capenga e não vira aviso.
-      if (change.field === "message_template_category_update") {
+      // O campo se chama `template_category_update` na Meta (conferido no app em produção,
+      // 23/11/2026); o nome longo fica aceito por tolerância.
+      if (
+        change.field === "template_category_update" ||
+        change.field === "message_template_category_update"
+      ) {
         const name = str(v.message_template_name);
         const language = str(v.message_template_language);
         if (!name || !language) continue;
@@ -550,7 +555,9 @@ export function parseMetaWebhook(envelope: MetaWebhookEnvelope): MetaWebhookEven
           // com o rótulo que a pessoa tocou.
           const cliqueDeBotao = tipo === "button" || tipo === "interactive";
           const corpoMidia =
-            tipo !== "contacts" && !cliqueDeBotao ? (raw[tipo] as Record<string, unknown> | undefined) : undefined;
+            tipo !== "contacts" && !cliqueDeBotao
+              ? (raw[tipo] as Record<string, unknown> | undefined)
+              : undefined;
           const sharedContact = tipo === "contacts" ? parseMetaInboundContact(raw) : null;
           const { tipoCrm, rawType } = noVocabularioDoCrm(tipo);
 
@@ -569,7 +576,7 @@ export function parseMetaWebhook(envelope: MetaWebhookEnvelope): MetaWebhookEven
               ? textoDoClique(raw, tipo)
               : tipoCrm === "text"
                 ? str((raw.text as Record<string, unknown>)?.body)
-                : sharedContact?.name ?? null,
+                : (sharedContact?.name ?? null),
             ...(sharedContact ? { sharedContact } : {}),
             media:
               corpoMidia && str(corpoMidia.id)
@@ -593,9 +600,7 @@ export function parseMetaWebhook(envelope: MetaWebhookEnvelope): MetaWebhookEven
         for (const raw of v.statuses as Record<string, unknown>[]) {
           const id = str(raw.id);
           if (!id) continue;
-          const errors = Array.isArray(raw.errors)
-            ? (raw.errors as Record<string, unknown>[])
-            : [];
+          const errors = Array.isArray(raw.errors) ? (raw.errors as Record<string, unknown>[]) : [];
           const first = errors[0] ?? {};
           out.push({
             kind: "message_status",
@@ -620,7 +625,8 @@ export function parseMetaWebhook(envelope: MetaWebhookEnvelope): MetaWebhookEven
 
           // O tipo passa pelo MESMO mapa da recebida (`TIPO_NO_CRM`): fora do CHECK
           // de `messages.type`, o insert falhava e a IA não pausava.
-          const corpoMidia = tipo !== "contacts" ? (raw[tipo] as Record<string, unknown> | undefined) : undefined;
+          const corpoMidia =
+            tipo !== "contacts" ? (raw[tipo] as Record<string, unknown> | undefined) : undefined;
           const sharedContact = tipo === "contacts" ? parseMetaInboundContact(raw) : null;
           const { tipoCrm, rawType } = noVocabularioDoCrm(tipo);
           out.push({
@@ -636,7 +642,7 @@ export function parseMetaWebhook(envelope: MetaWebhookEnvelope): MetaWebhookEven
             text:
               tipoCrm === "text"
                 ? str((raw.text as Record<string, unknown>)?.body)
-                : sharedContact?.name ?? str(corpoMidia?.caption),
+                : (sharedContact?.name ?? str(corpoMidia?.caption)),
             ...(sharedContact ? { sharedContact } : {}),
             media:
               corpoMidia && str(corpoMidia.id)
@@ -720,7 +726,7 @@ export function parseMetaWebhook(envelope: MetaWebhookEnvelope): MetaWebhookEven
                 text:
                   tipoCrm === "text"
                     ? str(objetoSimples(raw.text)?.body)
-                    : sharedContact?.name ?? str(corpoMidia?.caption),
+                    : (sharedContact?.name ?? str(corpoMidia?.caption)),
                 ...(sharedContact ? { sharedContact } : {}),
                 media:
                   corpoMidia && str(corpoMidia.id)
