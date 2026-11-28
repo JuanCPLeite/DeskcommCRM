@@ -79,3 +79,25 @@ externas pausam a IA, opt-out impede novas respostas. Saúde passa pelo vigia ex
 - Navegador real: aba Redes sociais, diagnóstico de conexão, permissões de IA e
   conversa com entrada/saída no Inbox. Identificador numérico permaneceu sem telefone.
 - Publicação e entrega real no provedor são verificações separadas do QA local.
+
+## Conexão direta pela Meta (Instagram) — Fase 1
+
+Além do provedor intermediário, o Instagram pode ser conectado **direto pelo app Meta da instalação**
+(login unificado), como canal próprio (`meta_social`). Desenho completo em
+`docs/superpowers/specs/2026-11-27-instagram-facebook-nativos-design.md`; o que existe na Fase 1:
+
+- **Credenciais do app** na instalação (`platform_meta_social_app`, só servidor), em `/admin/meta-social`;
+  o `.env` (`META_SOCIAL_*`) é o piso de rollback.
+- **Conexão** em Conexões › Instagram. A volta do login passa pela ponte pública
+  `/auth/meta-social-return` (o cookie Strict não viaja) e é concluída pela tela, autenticada
+  (`POST /api/v1/channels/meta-social`). Uma conta ativa pertence a UMA organização.
+- **Webhook único por app** em `/api/v1/webhooks/meta-social`: assinatura (HMAC SHA-256 da chave do app)
+  antes de qualquer escrita; a organização vem da conta que recebeu, nunca do corpo. Conta desconhecida e
+  comentário respondem 200 (sem tratamento ainda); falha de ingestão responde 500 para a Meta reentregar.
+- **Entrada** reaproveita a ingestão social (`ingestZernioInbound` com `socialMessage`): contato por
+  `instagram:<conta>:<participante>`, idempotência por `external_id`, opt-out e pós-entrada. **Saída**
+  pelo adaptador, com a janela de 24 h e falhas classificadas (permanente/transitória).
+- **Segurança**: token cifrado por sessão; a ligação (`social_account_id`, token) só é gravada pelo
+  servidor (gatilho estendido); desconectar zera o token e desfaz a assinatura na Meta (best-effort).
+- **Fora desta fase**: comentários, fluxos, Live, Story, Facebook, testadores da IA por conta (o
+  portão exige o formato de conta do provedor intermediário), App Review/Tech Provider.
