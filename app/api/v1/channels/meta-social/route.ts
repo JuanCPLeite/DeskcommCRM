@@ -91,7 +91,9 @@ export async function GET(_req?: NextRequest): Promise<NextResponse> {
   }
 
   const app = await appSocialDaMeta();
-  const faltam = (["appId", "loginConfigId", "appSecret"] as const).filter((c) => !app[c]);
+  // Sem ID da configuração do login o modo é o do Instagram, que dispensa esse campo.
+  const obrigatorios = app.loginConfigId ? (["appId", "loginConfigId", "appSecret"] as const) : (["appId", "appSecret"] as const);
+  const faltam = obrigatorios.filter((c) => !app[c]);
 
   const agora = Date.now();
   const contas = ((data ?? []) as LinhaDaConta[]).map((c) => {

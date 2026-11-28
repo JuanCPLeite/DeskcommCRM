@@ -51,9 +51,9 @@ export interface PerfilDaConta {
   profile_picture_url?: string;
 }
 
-export async function perfilDaConta(token: string, igId: string): Promise<PerfilDaConta> {
+export async function perfilDaConta(token: string, igId: string, base: string = graphBaseUrl()): Promise<PerfilDaConta> {
   const resposta = await fetch(
-    `${graphBaseUrl()}/${encodeURIComponent(igId)}?fields=id%2Cusername%2Cname%2Cprofile_picture_url`,
+    `${base}/${encodeURIComponent(igId)}?fields=id%2Cusername%2Cname%2Cprofile_picture_url`,
     { headers: cabecalho(token), cache: "no-store", redirect: "error" },
   );
   const corpo = await lerJson<Partial<PerfilDaConta> & { error?: { message?: string } }>(resposta);
@@ -64,9 +64,9 @@ export async function perfilDaConta(token: string, igId: string): Promise<Perfil
 }
 
 /** Assina o webhook da conta. `false` (e não exceção) quando a Meta recusa: a conexão fica de pé e a falha, visível. */
-export async function assinarWebhooks(token: string, igId: string): Promise<boolean> {
+export async function assinarWebhooks(token: string, igId: string, base: string = graphBaseUrl()): Promise<boolean> {
   try {
-    const resposta = await fetch(`${graphBaseUrl()}/${encodeURIComponent(igId)}/subscribed_apps`, {
+    const resposta = await fetch(`${base}/${encodeURIComponent(igId)}/subscribed_apps`, {
       method: "POST",
       headers: { ...cabecalho(token), "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({ subscribed_fields: CAMPOS_DO_WEBHOOK.join(",") }).toString(),
@@ -82,9 +82,9 @@ export async function assinarWebhooks(token: string, igId: string): Promise<bool
 }
 
 /** Desfaz a assinatura do webhook da conta. `false` (e não exceção) quando a Meta recusa ou não responde. */
-export async function desassinarWebhooks(token: string, igId: string): Promise<boolean> {
+export async function desassinarWebhooks(token: string, igId: string, base: string = graphBaseUrl()): Promise<boolean> {
   try {
-    const resposta = await fetch(`${graphBaseUrl()}/${encodeURIComponent(igId)}/subscribed_apps`, {
+    const resposta = await fetch(`${base}/${encodeURIComponent(igId)}/subscribed_apps`, {
       method: "DELETE",
       headers: cabecalho(token),
       cache: "no-store",

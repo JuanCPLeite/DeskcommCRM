@@ -18,8 +18,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { logger } from "@/lib/logger";
 import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
 
-import { graphBaseUrl } from "../meta/graph-base";
+import { baseDaGraph, modoDaSessao, renovarTokenDoInstagram, type ModoDoLogin } from "./instagram-login";
 import { ingestMetaSocial } from "./ingest";
+import { encryptWebhookSecret } from "@/lib/webhooks/secrets";
 
 const PROVIDER = "meta_social";
 /** A Graph de conversas é LENTA (medido: ~5 s a lista leve, ~13 s com mensagens juntas): o prazo de cada chamada é folgado. */
@@ -70,8 +71,8 @@ function anexosDe(m: MensagemDaGraph): { tipo: string; url: string }[] {
   return saida;
 }
 
-async function chamar<T>(token: string, caminho: string, q: URLSearchParams): Promise<T> {
-  const resposta = await fetch(`${graphBaseUrl()}/${caminho}?${q.toString()}`, {
+async function chamar<T>(base: string, token: string, caminho: string, q: URLSearchParams): Promise<T> {
+  const resposta = await fetch(`${base}/${caminho}?${q.toString()}`, {
     headers: { Authorization: `Bearer ${token}` },
     cache: "no-store",
     redirect: "error",
@@ -82,9 +83,9 @@ async function chamar<T>(token: string, caminho: string, q: URLSearchParams): Pr
 }
 
 /** A lista LEVE: só id e quando cada conversa mexeu pela última vez. */
-async function conversasQueMexeram(token: string, igId: string, desde: Date): Promise<{ id: string; mexeuEm: Date }[]> {
+async function conversasQueMexeram(base: string, token: string, igId: string, desde: Date): Promise<{ id: string; mexeuEm: Date }[]> {
   const q = new URLSearchParams({ platform: "instagram", limit: String(CONVERSAS_NA_LISTA), fields: "id,updated_time" });
-  const corpo = await chamar<{ data?: ConversaDaGraph[] }>(token, `${encodeURIComponent(igId)}/conversations`, q);
+  const corpo = await chamar<{ data?: ConversaDaGraph[] }>(base, token, `${encodeURIComponent(igId)}/conversations`, q);
   const lista: { id: string; mexeuEm: Date }[] = [];
   for (const c of corpo.data ?? []) {
     const mexeuEm = c.updated_time ? new Date(c.updated_time) : null;
@@ -95,21 +96,22 @@ async function conversasQueMexeram(token: string, igId: string, desde: Date): Pr
   return lista.sort((a, b) => a.mexeuEm.getTime() - b.mexeuEm.getTime());
 }
 
-async function mensagensDaConversa(token: string, conversaId: string): Promise<MensagemDaGraph[]> {
+async function mensagensDaConversa(base: string, token: string, conversaId: string): Promise<MensagemDaGraph[]> {
   const q = new URLSearchParams({
     fields: `messages.limit(${MENSAGENS_POR_CONVERSA}){id,message,created_time,from,attachments}`,
   });
-  const corpo = await chamar<ConversaDaGraph>(token, encodeURIComponent(conversaId), q);
+  const corpo = await chamar<ConversaDaGraph>(base, token, encodeURIComponent(conversaId), q);
   return corpo.messages?.data ?? [];
 }
 
 /** Uma conta: busca, entrega as DMs novas e devolve a nova marca d'água. Lança se a Meta falhar. */
 export async function buscarDmsDaConta(
   db: SupabaseClient,
-  sessao: { id: string; organizationId: string; igId: string; token: string; desde: Date },
+  sessao: { id: string; organizationId: string; igId: string; token: string; desde: Date; modo?: ModoDoLogin },
   inicio = Date.now(),
 ): Promise<{ entregues: number; ate: Date }> {
-  const mexeram = await conversasQueMexeram(sessao.token, sessao.igId, sessao.desde);
+  const base = baseDaGraph(sessao.modo);
+  const mexeram = await conversasQueMexeram(base, sessao.token, sessao.igId, sessao.desde);
   let ate = sessao.desde;
   let entregues = 0;
   let lidas = 0;
@@ -118,7 +120,7 @@ export async function buscarDmsDaConta(
     if (lidas >= CONVERSAS_LIDAS_POR_RODADA || Date.now() - inicio > ORCAMENTO_DA_RODADA_MS) break;
     lidas += 1;
     const novas: { m: MensagemDaGraph; quando: Date }[] = [];
-    for (const m of await mensagensDaConversa(sessao.token, conversa.id)) {
+    for (const m of await mensagensDaConversa(base, sessao.token, conversa.id)) {
       if (!m.id || !m.from?.id || m.from.id === sessao.igId || !m.created_time) continue;
       const quando = new Date(m.created_time);
       if (Number.isNaN(quando.getTime()) || quando.getTime() <= sessao.desde.getTime() - FOLGA_DA_MARCA_MS) continue;
@@ -149,11 +151,44 @@ export async function buscarDmsDaConta(
   return { entregues, ate };
 }
 
+/** Quantos dias antes de vencer o token do login do Instagram (60 dias) é renovado. */
+const RENOVAR_COM_FALTANDO_MS = 15 * 24 * 60 * 60 * 1000;
+
+/**
+ * O token de longa duração do login do Instagram vale 60 dias e se renova sozinho enquanto está
+ * vivo. Sem isto a conta pararia de funcionar em silêncio dois meses depois de conectada. Falha
+ * da Meta aqui não derruba a rodada: o token atual segue valendo até vencer, e a próxima tenta.
+ */
+async function renovarTokenSeVencendo(
+  db: SupabaseClient,
+  sessao: { id: string; organizationId: string; expiraEm: string | null },
+  token: string,
+  agora: Date,
+): Promise<string> {
+  const expira = sessao.expiraEm ? new Date(sessao.expiraEm) : null;
+  if (!expira || Number.isNaN(expira.getTime())) return token;
+  if (expira.getTime() - agora.getTime() > RENOVAR_COM_FALTANDO_MS) return token;
+  const novo = await renovarTokenDoInstagram(token);
+  if (!novo) return token;
+  const cifrado = await encryptWebhookSecret(db, novo.accessToken);
+  if (!cifrado) return token;
+  const { error } = await db
+    .from("channel_sessions")
+    .update({ social_token_encrypted: cifrado, social_token_expires_at: novo.expiraEm?.toISOString() ?? null })
+    .eq("organization_id", sessao.organizationId)
+    .eq("id", sessao.id);
+  if (error) {
+    logger.warn("[meta-social.busca] token renovado na Meta, mas não gravado", { channel_session_id: sessao.id, codigo: error.code });
+    return token;
+  }
+  return novo.accessToken;
+}
+
 /** A rodada inteira: todas as contas ativas. Falha de uma conta não derruba as outras. */
 export async function buscarDmsNovas(db: SupabaseClient, agora = new Date()): Promise<ResultadoDaBusca> {
   const { data, error } = await db
     .from("channel_sessions")
-    .select("id, organization_id, social_account_id, social_token_encrypted, metadata")
+    .select("id, organization_id, social_account_id, social_token_encrypted, social_token_expires_at, metadata")
     .eq("provider", PROVIDER)
     .is("archived_at", null)
     .not("social_token_encrypted", "is", null)
@@ -165,9 +200,19 @@ export async function buscarDmsNovas(db: SupabaseClient, agora = new Date()): Pr
     out.contas += 1;
     const organizationId = s.organization_id as string;
     try {
-      const token = await decryptWebhookSecret(db, s.social_token_encrypted as string);
-      if (!token) throw new Error("token_indisponivel");
+      const tokenAtual = await decryptWebhookSecret(db, s.social_token_encrypted as string);
+      if (!tokenAtual) throw new Error("token_indisponivel");
       const metadata = (s.metadata as Record<string, unknown> | null) ?? {};
+      const modo = modoDaSessao(metadata);
+      const token =
+        modo === "instagram"
+          ? await renovarTokenSeVencendo(
+              db,
+              { id: s.id as string, organizationId, expiraEm: (s.social_token_expires_at as string | null) ?? null },
+              tokenAtual,
+              agora,
+            )
+          : tokenAtual;
       const marca = typeof metadata.meta_social_busca_ate === "string" ? new Date(metadata.meta_social_busca_ate) : null;
       const desde = marca && !Number.isNaN(marca.getTime()) ? marca : new Date(agora.getTime() - JANELA_INICIAL_MS);
 
@@ -177,6 +222,7 @@ export async function buscarDmsNovas(db: SupabaseClient, agora = new Date()): Pr
         igId: s.social_account_id as string,
         token,
         desde,
+        modo,
       });
       out.mensagens += entregues;
 

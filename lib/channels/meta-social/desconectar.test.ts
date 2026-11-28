@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const desassinar = vi.fn(async (..._a: unknown[]) => true);
-let linha: { social_account_id: string; social_token_encrypted: string | null } | null = {
+let linha: { social_account_id: string; social_token_encrypted: string | null; metadata?: unknown } | null = {
   social_account_id: "1784",
   social_token_encrypted: "\\xTOKEN",
 };
@@ -33,7 +33,13 @@ beforeEach(() => {
 describe("desligarContaNaMeta (best-effort: nunca lança, nunca impede a desconexão)", () => {
   it("desfaz a assinatura do webhook da conta com o token da sessão", async () => {
     expect(await desligarContaNaMeta(dbFalso(), "org-A", "sessao-1")).toBe("desfeito");
-    expect(desassinar).toHaveBeenCalledWith("TOKEN-DO-LOGIN", "1784");
+    expect(desassinar).toHaveBeenCalledWith("TOKEN-DO-LOGIN", "1784", expect.stringContaining("graph.facebook.com"));
+  });
+
+  it("conta conectada pelo login do Instagram: desfaz no host do Instagram", async () => {
+    linha = { social_account_id: "1784", social_token_encrypted: "TOKEN-CIFRADO", metadata: { login_modo: "instagram" } };
+    expect(await desligarContaNaMeta(dbFalso(), "org-A", "sessao-1")).toBe("desfeito");
+    expect(desassinar).toHaveBeenCalledWith("TOKEN-DO-LOGIN", "1784", expect.stringContaining("graph.instagram.com"));
   });
 
   it("sem token gravado ou que não decifra: 'sem_credencial', sem chamar a Meta", async () => {

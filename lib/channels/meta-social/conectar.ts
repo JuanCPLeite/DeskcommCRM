@@ -19,6 +19,14 @@ import { encryptWebhookSecret } from "@/lib/webhooks/secrets";
 
 import { appSocialDaMeta } from "./app";
 import { SemContaAtribuidaError, assinarWebhooks, contasAtribuidas, expiracaoDoToken, perfilDaConta } from "./graph";
+import {
+  modoDaConfiguracao,
+  perfilDoInstagram,
+  trocarCodigoDoInstagram,
+  urlDeAutorizacaoDoInstagram,
+  baseDaGraph,
+  type ModoDoLogin,
+} from "./instagram-login";
 import { paraEstadoDaMeta, trocarCodigo, urlDeAutorizacao, verificarEstadoDaMeta } from "./oauth";
 import { atualizarSessao, criarSessao, sessaoAtivaDaConta } from "./store";
 
@@ -58,11 +66,19 @@ export function redirectUriDaMeta(publicBase: string): string {
 
 async function appCompleto() {
   const app = await appSocialDaMeta();
-  const faltam = (["appId", "loginConfigId", "appSecret"] as const).filter((c) => !app[c]);
+  const modo = modoDaConfiguracao(app);
+  // No login do Instagram não há configuração de login: só o ID do app e a chave.
+  const obrigatorios = modo === "instagram" ? (["appId", "appSecret"] as const) : (["appId", "loginConfigId", "appSecret"] as const);
+  const faltam = obrigatorios.filter((c) => !app[c]);
   if (faltam.length > 0) {
     throw new ErroDaConexaoMeta("app_nao_configurado", "O app Meta desta instalação não está configurado.", [...faltam]);
   }
-  return { appId: app.appId as string, loginConfigId: app.loginConfigId as string, appSecret: app.appSecret as string };
+  return {
+    modo,
+    appId: app.appId as string,
+    loginConfigId: app.loginConfigId ?? "",
+    appSecret: app.appSecret as string,
+  };
 }
 
 export async function iniciarConexaoMeta(ctx: ContextoDaConexaoMeta): Promise<{ url: string }> {
@@ -71,6 +87,9 @@ export async function iniciarConexaoMeta(ctx: ContextoDaConexaoMeta): Promise<{ 
     { organizationId: ctx.organizationId, userId: ctx.userId },
     { segredo: ctx.segredo, agora: ctx.agora },
   );
+  if (app.modo === "instagram") {
+    return { url: urlDeAutorizacaoDoInstagram({ appId: app.appId, redirectUri: redirectUriDaMeta(ctx.publicBase), state }) };
+  }
   return {
     url: urlDeAutorizacao({
       appId: app.appId,
@@ -107,24 +126,33 @@ export async function concluirConexaoMeta(
 
   const app = await appCompleto();
 
+  const modo: ModoDoLogin = app.modo;
   let token: string;
-  try {
-    ({ accessToken: token } = await trocarCodigo({
-      appId: app.appId,
-      appSecret: app.appSecret,
-      redirectUri: redirectUriDaMeta(ctx.publicBase),
-      code: volta.code,
-    }));
-  } catch (err) {
-    throw new ErroDaConexaoMeta(
-      "troca_do_codigo_falhou",
-      err instanceof Error ? err.message : "A Meta recusou o código de autorização.",
-    );
-  }
-
   let contas: { id: string; username?: string }[];
+  let tokenExpiraEm: Date | null;
   try {
-    contas = await contasAtribuidas(token);
+    if (modo === "instagram") {
+      const t = await trocarCodigoDoInstagram({
+        appId: app.appId,
+        appSecret: app.appSecret,
+        redirectUri: redirectUriDaMeta(ctx.publicBase),
+        code: volta.code,
+      });
+      token = t.accessToken;
+      tokenExpiraEm = t.expiraEm;
+      // O login do Instagram autoriza UMA conta: o perfil dela é a lista.
+      const perfil = await perfilDoInstagram(token);
+      contas = [{ id: perfil.id, username: perfil.username }];
+    } else {
+      ({ accessToken: token } = await trocarCodigo({
+        appId: app.appId,
+        appSecret: app.appSecret,
+        redirectUri: redirectUriDaMeta(ctx.publicBase),
+        code: volta.code,
+      }));
+      contas = await contasAtribuidas(token);
+      tokenExpiraEm = await expiracaoDoToken({ token, appId: app.appId, appSecret: app.appSecret });
+    }
   } catch (err) {
     if (err instanceof SemContaAtribuidaError) {
       throw new ErroDaConexaoMeta(
@@ -132,12 +160,15 @@ export async function concluirConexaoMeta(
         "O login não trouxe nenhuma conta do Instagram. Marque a conta na tela de permissões da Meta.",
       );
     }
-    throw err;
+    throw new ErroDaConexaoMeta(
+      "troca_do_codigo_falhou",
+      err instanceof Error ? err.message : "A Meta recusou o código de autorização.",
+    );
   }
 
   const tokenCifrado = await encryptWebhookSecret(db, token);
   if (!tokenCifrado) throw new ErroDaConexaoMeta("cifra_indisponivel", "A cifra desta instalação não está disponível.");
-  const tokenExpiraEm = await expiracaoDoToken({ token, appId: app.appId, appSecret: app.appSecret });
+  const base = baseDaGraph(modo);
 
   const resultado: ResultadoDaConexao = { conectadas: [], recusadas: [] };
   for (const conta of contas) {
@@ -149,8 +180,8 @@ export async function concluirConexaoMeta(
         resultado.recusadas.push({ igId: conta.id, motivo: "ja_conectada_em_outra_organizacao" });
         continue;
       }
-      const perfil = await perfilDaConta(token, conta.id);
-      const webhookAssinado = await assinarWebhooks(token, conta.id);
+      const perfil = modo === "instagram" ? await perfilDoInstagram(token) : await perfilDaConta(token, conta.id, base);
+      const webhookAssinado = await assinarWebhooks(token, conta.id, base);
       let channelId: string;
       if (existente) {
         await atualizarSessao(db, {
@@ -159,6 +190,7 @@ export async function concluirConexaoMeta(
           tokenCifrado,
           tokenExpiraEm,
           webhookAssinado,
+          loginModo: modo,
         });
         channelId = existente.id;
       } else {
@@ -170,6 +202,7 @@ export async function concluirConexaoMeta(
           tokenCifrado,
           tokenExpiraEm,
           webhookAssinado,
+          loginModo: modo,
         }));
       }
       resultado.conectadas.push({ channelId, igId: conta.id, username: perfil.username, webhookAssinado });

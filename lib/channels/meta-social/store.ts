@@ -40,6 +40,8 @@ export interface NovaSessao {
   tokenCifrado: string;
   tokenExpiraEm: Date | null;
   webhookAssinado: boolean;
+  /** O modo em que a conta foi conectada: decide o host da Graph em tudo o que vem depois. */
+  loginModo?: "unificado" | "instagram";
 }
 
 /** Cria o canal. A IA nasce pausada (`pre_go_live`) e o limite de números do plano sobe cru para a rota dizer o número. */
@@ -65,6 +67,7 @@ export async function criarSessao(db: SupabaseClient, nova: NovaSessao): Promise
         ...metadataInicialDoCanal(),
         social_platform: "instagram",
         meta_social_webhook_assinado: nova.webhookAssinado,
+        login_modo: nova.loginModo ?? "unificado",
       },
     })
     .select("id")
@@ -85,6 +88,7 @@ export async function atualizarSessao(
     tokenCifrado: string;
     tokenExpiraEm: Date | null;
     webhookAssinado: boolean;
+    loginModo?: "unificado" | "instagram";
   },
 ): Promise<void> {
   const { error } = await db
@@ -105,7 +109,7 @@ export async function atualizarSessao(
     .eq("organization_id", input.organizationId)
     .eq("id", input.sessionId)
     .maybeSingle();
-  const metadata = { ...((data?.metadata as Record<string, unknown> | null) ?? {}), meta_social_webhook_assinado: input.webhookAssinado };
+  const metadata = { ...((data?.metadata as Record<string, unknown> | null) ?? {}), meta_social_webhook_assinado: input.webhookAssinado, login_modo: input.loginModo ?? "unificado" };
   await db
     .from("channel_sessions")
     .update({ metadata })

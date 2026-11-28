@@ -15,6 +15,7 @@ import { logger } from "@/lib/logger";
 import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
 
 import { desassinarWebhooks } from "./graph";
+import { baseDaGraph, modoDaSessao } from "./instagram-login";
 
 export type DesligamentoNaMeta = "desfeito" | "sem_credencial" | "falhou";
 
@@ -26,7 +27,7 @@ export async function desligarContaNaMeta(
   try {
     const { data, error } = await db
       .from("channel_sessions")
-      .select("social_account_id, social_token_encrypted")
+      .select("social_account_id, social_token_encrypted, metadata")
       .eq("organization_id", organizationId)
       .eq("id", sessionId)
       .maybeSingle();
@@ -36,7 +37,7 @@ export async function desligarContaNaMeta(
     if (!cifrado || !conta) return "sem_credencial";
     const token = await decryptWebhookSecret(db, cifrado);
     if (!token) return "sem_credencial";
-    return (await desassinarWebhooks(token, conta)) ? "desfeito" : "falhou";
+    return (await desassinarWebhooks(token, conta, baseDaGraph(modoDaSessao(data?.metadata)))) ? "desfeito" : "falhou";
   } catch (err) {
     logger.warn("[meta-social] falha ao desfazer a assinatura do webhook na Meta", {
       organization_id: organizationId,

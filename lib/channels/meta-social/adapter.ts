@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
 
 import { FalhaDeEnvioDoCanal, naturezaDoStatusHttp, type NaturezaDaFalha } from "../falha-de-envio";
-import { graphBaseUrl } from "../meta/graph-base";
+import { baseDaGraph, modoDaSessao, type ModoDoLogin } from "./instagram-login";
 import { socialMessageId } from "../social/catalog";
 import type { ChannelAdapter } from "../types";
 
@@ -30,6 +30,7 @@ const CODIGOS_DE_TOKEN = new Set([102, 190]);
 
 interface SessaoDoToken {
   token: string;
+  modo: ModoDoLogin;
   expiraEm: Date | null;
 }
 
@@ -38,7 +39,7 @@ async function sessaoDoToken(organizationId: string, contaId: string): Promise<S
   const db = createAdminClient();
   const { data } = await db
     .from("channel_sessions")
-    .select("social_token_encrypted, social_token_expires_at")
+    .select("social_token_encrypted, social_token_expires_at, metadata")
     .eq("organization_id", organizationId)
     .eq("provider", "meta_social")
     .eq("social_account_id", contaId)
@@ -49,7 +50,7 @@ async function sessaoDoToken(organizationId: string, contaId: string): Promise<S
   const token = await decryptWebhookSecret(db, cifrado);
   if (!token) return null;
   const expira = data?.social_token_expires_at as string | null | undefined;
-  return { token, expiraEm: expira ? new Date(expira) : null };
+  return { token, modo: modoDaSessao(data?.metadata), expiraEm: expira ? new Date(expira) : null };
 }
 
 interface ErroDaGraph {
@@ -112,7 +113,7 @@ export const metaSocialAdapter: ChannelAdapter = {
 
     let resposta: Response;
     try {
-      resposta = await fetch(`${graphBaseUrl()}/${encodeURIComponent(envelope.sessionRef)}/messages`, {
+      resposta = await fetch(`${baseDaGraph(sessao.modo)}/${encodeURIComponent(envelope.sessionRef)}/messages`, {
         method: "POST",
         headers: { Authorization: `Bearer ${sessao.token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ recipient: { id: envelope.providerConversationId }, message: mensagemDoEnvelope(envelope) }),
@@ -143,7 +144,7 @@ export const metaSocialAdapter: ChannelAdapter = {
       return { reachable: true, status: "FAILED", detail: "token_vencido" };
     }
     try {
-      const resposta = await fetch(`${graphBaseUrl()}/${encodeURIComponent(input.sessionRef)}?fields=id`, {
+      const resposta = await fetch(`${baseDaGraph(sessao.modo)}/${encodeURIComponent(input.sessionRef)}?fields=id`, {
         headers: { Authorization: `Bearer ${sessao.token}` },
         cache: "no-store",
         redirect: "error",

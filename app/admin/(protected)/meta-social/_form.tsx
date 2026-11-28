@@ -160,7 +160,7 @@ export function FormularioDoAppSocial({
             onChange={(e) => setLoginConfigId(e.target.value)}
           />
           <p className="text-xs text-muted-foreground">
-            {t("Fica em Login do Facebook para Empresas › Configurações, na configuração com os ativos do Instagram.")}
+            {t("Login unificado: fica em Login do Facebook para Empresas › Configurações. Login do Instagram (app com a aba “Login empresarial no Instagram”): deixe em branco e use, acima, o ID do app do Instagram.")}
           </p>
         </div>
 
