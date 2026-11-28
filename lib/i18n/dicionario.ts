@@ -13059,6 +13059,7 @@ export const DICIONARIO: Traducoes = {
   "Configurar o app": { es: "Configurar la app" },
   "Conectar Instagram": { es: "Conectar Instagram" },
   "Concluindo a conexão com a Meta…": { es: "Finalizando la conexión con Meta…" },
+  "Conexão concluída. Pode fechar esta janela.": { es: "Conexión completada. Puede cerrar esta ventana." },
   "Nenhuma conta do Instagram conectada ainda.": { es: "Aún no hay ninguna cuenta de Instagram conectada." },
   "O acesso venceu. Reconecte.": { es: "El acceso venció. Vuelve a conectar." },
   "Precisa de atenção": { es: "Requiere atención" },

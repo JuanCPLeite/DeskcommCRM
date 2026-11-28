@@ -41,6 +41,14 @@ interface Conclusao {
 }
 
 const CHAVE = ["meta-social-contas"] as const;
+const NOME_DA_JANELA = "meta-social-conexao";
+/** Canal entre a janela de conexão e a tela que a abriu (mesma origem). Não depende de `window.opener`,
+ *  que o login da Meta pode cortar (política de isolamento da janela). */
+const CANAL = "meta-social-conexao";
+/** Marca de que ESTE navegador abriu a janela de conexão há pouco: é o que a janela confere ao voltar. */
+const MARCA_DA_JANELA = "meta-social-janela";
+const VALIDADE_DA_MARCA_MS = 30 * 60 * 1000;
+type Fim = { resultado?: Conclusao["data"] | null; cancelada?: boolean };
 
 /**
  * Instagram pela conexão DIRETA com a Meta: conectar contas pelo app Meta da
@@ -56,14 +64,48 @@ export function MetaSocialClient() {
   const queryClient = useQueryClient();
   const [aDesconectar, setADesconectar] = useState<Conta | null>(null);
   const concluiu = useRef(false);
+  const [fechavel, setFechavel] = useState(false);
 
   const lista = useQuery({ queryKey: CHAVE, queryFn: () => apiClient.get<Listagem>("/api/v1/channels/meta-social") });
 
+  // A conexão abre numa JANELA à parte: a tela de Conexões fica onde está e, ao fim, a
+  // janela avisa e fecha. A janela é aberta NO CLIQUE (antes de qualquer espera) porque o
+  // navegador só a permite em resposta direta a um gesto; se ele a bloquear, cai no
+  // caminho antigo e a conexão acontece na mesma aba.
+  const janela = useRef<Window | null>(null);
   const conectar = useMutation({
     mutationFn: () => apiClient.post<{ data: { url: string } }>("/api/v1/channels/meta-social", { acao: "iniciar" }),
-    onSuccess: (r) => window.location.assign(r.data.url),
-    onError: () => toast.error(t("Não foi possível concluir a conexão.")),
+    onSuccess: (r) => {
+      if (janela.current && !janela.current.closed) janela.current.location.href = r.data.url;
+      else window.location.assign(r.data.url);
+    },
+    onError: () => {
+      janela.current?.close();
+      toast.error(t("Não foi possível concluir a conexão."));
+    },
   });
+  function abrirConexao() {
+    janela.current = window.open("about:blank", NOME_DA_JANELA, "popup=yes,width=620,height=760");
+    if (janela.current) localStorage.setItem(MARCA_DA_JANELA, String(Date.now()));
+    else localStorage.removeItem(MARCA_DA_JANELA);
+    conectar.mutate();
+  }
+
+  // A janela terminou: mostra o resultado aqui e atualiza a lista.
+  useEffect(() => {
+    const canal = new BroadcastChannel(CANAL);
+    canal.onmessage = (e: MessageEvent<Fim>) => {
+      const d = e.data;
+      if (d.cancelada) toast.error(t("A conexão foi cancelada na Meta."));
+      else if (!d.resultado) toast.error(t("Não foi possível concluir a conexão."));
+      else {
+        for (const c of d.resultado.conectadas) toast.success(`${t("Conta conectada")}: @${c.username}`);
+        if (d.resultado.recusadas.length > 0) toast.error(t("Esta conta já está conectada em outra empresa e não foi adicionada."));
+      }
+      void queryClient.invalidateQueries({ queryKey: CHAVE });
+    };
+    return () => canal.close();
+  }, [queryClient, t]);
 
   const desconectar = useMutation({
     mutationFn: (id: string) => apiClient.delete(`/api/v1/channel-sessions/${id}`),
@@ -79,24 +121,44 @@ export function MetaSocialClient() {
     if (!estado || concluiu.current) return;
     concluiu.current = true;
     const limpar = () => router.replace(pathname + "?aba=meta-social");
+    // Dentro da janela de conexão: entrega o resultado à tela que a abriu e fecha.
+    const marca = Number(localStorage.getItem(MARCA_DA_JANELA) ?? 0);
+    const naJanela = Date.now() - marca < VALIDADE_DA_MARCA_MS;
+    function entregar(msg: Fim) {
+      localStorage.removeItem(MARCA_DA_JANELA);
+      const canal = new BroadcastChannel(CANAL);
+      canal.postMessage(msg);
+      canal.close();
+      window.close();
+      // Se o navegador não deixar fechar, a pessoa vê o recado e fecha.
+      setFechavel(true);
+    }
     if (erro) {
+      if (naJanela) return entregar({ cancelada: true });
       toast.error(t("A conexão foi cancelada na Meta."));
       limpar();
       return;
     }
     if (!codigo) {
+      if (naJanela) return entregar({ resultado: null });
       limpar();
       return;
     }
     apiClient
       .post<Conclusao>("/api/v1/channels/meta-social", { acao: "concluir", estado, code: codigo })
       .then((r) => {
+        if (naJanela) return entregar({ resultado: r.data });
         for (const c of r.data.conectadas) toast.success(`${t("Conta conectada")}: @${c.username}`);
         if (r.data.recusadas.length > 0) toast.error(t("Esta conta já está conectada em outra empresa e não foi adicionada."));
         void queryClient.invalidateQueries({ queryKey: CHAVE });
       })
-      .catch(() => toast.error(t("Não foi possível concluir a conexão.")))
-      .finally(limpar);
+      .catch(() => {
+        if (naJanela) return entregar({ resultado: null });
+        toast.error(t("Não foi possível concluir a conexão."));
+      })
+      .finally(() => {
+        if (!naJanela) limpar();
+      });
   }, [estado, codigo, erro, pathname, router, queryClient, t]);
 
   const dados = lista.data?.data;
@@ -126,12 +188,16 @@ export function MetaSocialClient() {
           <Button
             data-testid="meta-social-conectar"
             disabled={!dados?.configured || conectar.isPending}
-            onClick={() => conectar.mutate()}
+            onClick={abrirConexao}
           >
             {t("Conectar Instagram")}
           </Button>
         </div>
-        {estado && !erro ? <p className="text-xs text-muted-foreground">{t("Concluindo a conexão com a Meta…")}</p> : null}
+        {estado && !erro ? (
+          <p className="text-xs text-muted-foreground">
+            {fechavel ? t("Conexão concluída. Pode fechar esta janela.") : t("Concluindo a conexão com a Meta…")}
+          </p>
+        ) : null}
       </Card>
 
       {dados && dados.accounts.length === 0 ? (
