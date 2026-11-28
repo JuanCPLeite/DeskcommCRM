@@ -25,6 +25,12 @@ async function handle(req: NextRequest): Promise<Response> {
   if (!autorizaCron(req)) {
     return fail("forbidden", "Cron secret missing or invalid.", 403, { requestId });
   }
+  // A chave de liga/desliga: `META_SOCIAL_BUSCA=off` no `.env` para a busca. Serve para provar o webhook
+  // sozinho (com a busca ligada, não dá para saber quem entregou a DM) e para desligar a rede de
+  // segurança quando o webhook estiver comprovado. Qualquer outro valor deixa ligada.
+  if ((process.env.META_SOCIAL_BUSCA ?? "").trim().toLowerCase() === "off") {
+    return ok({ pulado: "busca_desligada" }, { requestId });
+  }
   try {
     const r = await buscarDmsNovas(createAdminClient());
     if (r.falhas > 0) logger.warn("[meta-social.busca] contas com falha na rodada", { ...r });
