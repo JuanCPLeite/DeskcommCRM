@@ -157,3 +157,49 @@ export async function perfilDoInstagram(token: string): Promise<PerfilDoInstagra
   if (!resposta.ok || id === undefined) throw new Error(`Leitura do perfil falhou: ${motivo(corpo, resposta.status)}`);
   return { id: String(id), username: corpo.username ?? "", name: corpo.name, profile_picture_url: corpo.profile_picture_url };
 }
+
+export interface PerfilDoParticipante {
+  nome: string | null;
+  usuario: string | null;
+}
+
+const MEMO_DE_PARTICIPANTES = new Map<string, { valor: PerfilDoParticipante | null; ate: number }>();
+const VALIDADE_DO_MEMO_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * Nome e @ de quem escreveu, para o contato nascer com identificação em vez de um número. Vale nos dois
+ * modos (cada um no seu host). Nunca lança: perfil indisponível (a pessoa restringiu a conta, a Meta
+ * demorou) devolve `null` e o contato nasce sem nome, como antes. O resultado fica em memória por
+ * algumas horas — a mesma pessoa não custa uma ida à Meta por mensagem.
+ */
+export async function perfilDoParticipante(
+  token: string,
+  modo: ModoDoLogin,
+  contaId: string,
+  participanteId: string,
+): Promise<PerfilDoParticipante | null> {
+  const chave = `${contaId}:${participanteId}`;
+  const memo = MEMO_DE_PARTICIPANTES.get(chave);
+  if (memo && memo.ate > Date.now()) return memo.valor;
+  let valor: PerfilDoParticipante | null = null;
+  try {
+    const resposta = await fetch(`${baseDaGraph(modo)}/${encodeURIComponent(participanteId)}?fields=name,username`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+      redirect: "error",
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (resposta.ok) {
+      const corpo = await json<{ name?: string; username?: string }>(resposta);
+      const nome = corpo.name?.trim() || null;
+      const usuario = corpo.username?.trim() || null;
+      if (nome || usuario) valor = { nome, usuario };
+    }
+  } catch {
+    valor = null;
+  }
+  // Falha também entra no memo, por pouco tempo: uma conta restrita não vira uma chamada por mensagem.
+  MEMO_DE_PARTICIPANTES.set(chave, { valor, ate: Date.now() + (valor ? VALIDADE_DO_MEMO_MS : 5 * 60 * 1000) });
+  if (MEMO_DE_PARTICIPANTES.size > 2000) MEMO_DE_PARTICIPANTES.delete(MEMO_DE_PARTICIPANTES.keys().next().value as string);
+  return valor;
+}

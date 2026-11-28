@@ -116,3 +116,65 @@ export async function atualizarSessao(
     .eq("organization_id", input.organizationId)
     .eq("id", input.sessionId);
 }
+
+/**
+ * O HISTÓRICO VOLTA: ao reconectar uma conta que a MESMA organização já teve, as conversas e mensagens
+ * dos canais arquivados dela passam para o canal novo. A conversa é presa ao canal, e sem isto a pessoa
+ * voltaria a escrever e abriria uma conversa nova, com o atendimento antigo escondido no canal arquivado.
+ *
+ * Quem decide o que é "o mesmo" é o banco: mesma organização, mesma conta (`social_account_id`) e, dentro
+ * dela, a mesma pessoa (`provider_conversation_id`). Pessoa diferente continua sendo uma conversa à parte,
+ * e a conta de OUTRA organização nunca entra (todo filtro leva `organization_id`).
+ *
+ * Uma conversa que o canal novo já tem para a mesma pessoa NÃO é movida (o índice por canal e pessoa
+ * seguraria, e juntar duas conversas vivas é decisão de quem atende); fica no canal antigo, visível no histórico.
+ */
+export async function adotarHistoricoDaConta(
+  db: SupabaseClient,
+  input: { organizationId: string; sessaoNovaId: string; socialAccountId: string },
+): Promise<{ conversas: number }> {
+  const { data: antigos, error } = await db
+    .from("channel_sessions")
+    .select("id")
+    .eq("organization_id", input.organizationId)
+    .eq("provider", PROVIDER)
+    .eq("social_account_id", input.socialAccountId)
+    .neq("id", input.sessaoNovaId)
+    .not("archived_at", "is", null)
+    .limit(20);
+  if (error || !antigos?.length) return { conversas: 0 };
+
+  const { data: jaTem } = await db
+    .from("conversations")
+    .select("provider_conversation_id")
+    .eq("organization_id", input.organizationId)
+    .eq("channel_session_id", input.sessaoNovaId);
+  const ocupadas = new Set((jaTem ?? []).map((c) => c.provider_conversation_id as string | null));
+
+  let movidas = 0;
+  for (const antigo of antigos) {
+    const { data: conversas } = await db
+      .from("conversations")
+      .select("id, provider_conversation_id")
+      .eq("organization_id", input.organizationId)
+      .eq("channel_session_id", antigo.id as string);
+    for (const c of conversas ?? []) {
+      const pessoa = (c.provider_conversation_id as string | null) ?? null;
+      if (pessoa !== null && ocupadas.has(pessoa)) continue;
+      const { error: eConversa } = await db
+        .from("conversations")
+        .update({ channel_session_id: input.sessaoNovaId })
+        .eq("organization_id", input.organizationId)
+        .eq("id", c.id as string);
+      if (eConversa) continue;
+      await db
+        .from("messages")
+        .update({ channel_session_id: input.sessaoNovaId })
+        .eq("organization_id", input.organizationId)
+        .eq("conversation_id", c.id as string);
+      if (pessoa !== null) ocupadas.add(pessoa);
+      movidas += 1;
+    }
+  }
+  return { conversas: movidas };
+}

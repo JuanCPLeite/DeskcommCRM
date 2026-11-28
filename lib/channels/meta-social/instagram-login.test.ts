@@ -5,6 +5,7 @@ import {
   modoDaConfiguracao,
   modoDaSessao,
   perfilDoInstagram,
+  perfilDoParticipante,
   renovarTokenDoInstagram,
   trocarCodigoDoInstagram,
   urlDeAutorizacaoDoInstagram,
@@ -94,5 +95,28 @@ describe("perfilDoInstagram e renovação", () => {
     expect(await renovarTokenDoInstagram("T")).toBeNull();
     vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("rede"); }));
     expect(await renovarTokenDoInstagram("T")).toBeNull();
+  });
+});
+
+describe("perfilDoParticipante", () => {
+  it("devolve nome e @ de quem escreveu, no host do modo da conta, e guarda em memória", async () => {
+    const f = vi.fn(async () => new Response(JSON.stringify({ name: "Maria Silva", username: "maria.silva" }), { status: 200 }));
+    vi.stubGlobal("fetch", f);
+    const a = await perfilDoParticipante("T", "instagram", "conta-1", "pessoa-1");
+    const b = await perfilDoParticipante("T", "instagram", "conta-1", "pessoa-1");
+    expect(a).toEqual({ nome: "Maria Silva", usuario: "maria.silva" });
+    expect(b).toEqual(a);
+    expect(f).toHaveBeenCalledTimes(1);
+    const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+    expect(String(url)).toContain("graph.instagram.com");
+    expect(String(url)).not.toContain("T&");
+    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer T");
+  });
+
+  it("a Meta recusa ou cai: devolve null sem lançar (o contato nasce sem nome, como antes)", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 400 })));
+    expect(await perfilDoParticipante("T", "unificado", "conta-2", "pessoa-2")).toBeNull();
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("rede"); }));
+    expect(await perfilDoParticipante("T", "unificado", "conta-2", "pessoa-3")).toBeNull();
   });
 });

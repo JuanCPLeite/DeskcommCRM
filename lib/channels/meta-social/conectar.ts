@@ -28,7 +28,7 @@ import {
   type ModoDoLogin,
 } from "./instagram-login";
 import { paraEstadoDaMeta, trocarCodigo, urlDeAutorizacao, verificarEstadoDaMeta } from "./oauth";
-import { atualizarSessao, criarSessao, sessaoAtivaDaConta } from "./store";
+import { adotarHistoricoDaConta, atualizarSessao, criarSessao, sessaoAtivaDaConta } from "./store";
 
 export type CodigoDoErroDaConexao =
   | "app_nao_configurado"
@@ -204,6 +204,9 @@ export async function concluirConexaoMeta(
           webhookAssinado,
           loginModo: modo,
         }));
+        // Reconexão da mesma conta pela mesma organização: o histórico volta para o canal novo.
+        // Falha aqui não desfaz a conexão: o histórico segue no canal arquivado, e a próxima reconexão tenta de novo.
+        await adotarHistoricoDaConta(db, { organizationId: ctx.organizationId, sessaoNovaId: channelId, socialAccountId: conta.id }).catch(() => undefined);
       }
       resultado.conectadas.push({ channelId, igId: conta.id, username: perfil.username, webhookAssinado });
     } catch (err) {
