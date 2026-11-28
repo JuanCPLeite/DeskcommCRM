@@ -161,6 +161,27 @@ const LEITURAS_LEGITIMAS: ReadonlyArray<{
       "quem já atendia: a proteção que existe para não mexer no webhook de " +
       "ninguém passaria a autorizar exatamente isso.",
   },
+  {
+    arquivo: "lib/channels/meta-social/ingest.ts",
+    funcao: "sessaoDaConta",
+    filtros: ["provider", "social_account_id", "archived_at"],
+    motivo:
+      "O webhook da Meta é UM por app e não traz tenant: a organização é a DONA da conta " +
+      "que recebeu (`social_account_id`, único entre organizações pelo índice da migration " +
+      "9513), e só é consultada DEPOIS da assinatura HMAC conferir. Filtrar por " +
+      "organization_id aqui seria circular — é esta consulta que descobre qual é. O " +
+      "identificador vem do corpo, mas só vale por já ter passado pela assinatura do app.",
+  },
+  {
+    arquivo: "lib/channels/meta-social/store.ts",
+    funcao: "sessaoAtivaDaConta",
+    filtros: ["provider", "social_account_id", "archived_at"],
+    motivo:
+      "Pergunta feita ao CONECTAR: 'esta conta já pertence a alguma organização?'. O ponto " +
+      "do contrato é justamente alcançar a conexão de OUTRA organização para recusar a " +
+      "segunda (uma conta ativa pertence a UMA organização, senão o webhook misturaria as " +
+      "caixas de entrada). Só devolve id e organização dona; nada da outra conexão sai daqui.",
+  },
 ];
 
 /** A consulta é EXATAMENTE a declarada (arquivo + função + conjunto de filtros)? */

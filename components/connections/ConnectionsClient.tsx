@@ -19,7 +19,7 @@ import {
   type ChannelSession,
 } from "@/hooks/channels/useChannelSessions";
 import {
-  CHANNEL_PROVIDER_SOCIAL,
+  ehCanalSocial,
   DEFAULT_CHANNEL_PROVIDER,
   capabilitiesOf,
 } from "@/lib/channels/capabilities";
@@ -263,7 +263,7 @@ export function ConnectionsClient({
 
   // A mesma lista que a tela desenha é a que a ação em lote comanda: filtrar
   // social aqui (como a tela já faz) evita um botão que pede ids que ninguém vê.
-  const list = (sessions ?? []).filter((session) => session.provider !== CHANNEL_PROVIDER_SOCIAL);
+  const list = (sessions ?? []).filter((session) => !ehCanalSocial(session.provider));
   /** Alvo de cada botão de lote — os dois só existem quando têm o que fazer. */
   const paraPausar = list.filter((c) => !canalDesativado(c.metadata));
   const paraRetomar = list.filter((c) => canalDesativado(c.metadata));

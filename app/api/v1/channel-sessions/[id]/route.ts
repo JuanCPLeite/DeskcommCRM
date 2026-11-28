@@ -30,7 +30,12 @@ import { loadAuthUser, mfaEmDivida } from "@/lib/auth/server";
 import { orgAtivaDaApi, requireRole } from "@/lib/auth/require-role";
 import { resolveAuthDual, tetoDeEscritaDoToken } from "@/lib/api/auth-dual";
 import { extractBearer } from "@/lib/mcp/auth";
-import { CHANNEL_PROVIDER_SOCIAL, CHANNEL_PROVIDER_WAHA } from "@/lib/channels/capabilities";
+import {
+  CHANNEL_PROVIDER_META_SOCIAL,
+  CHANNEL_PROVIDER_SOCIAL,
+  CHANNEL_PROVIDER_WAHA,
+} from "@/lib/channels/capabilities";
+import { desligarContaNaMeta, type DesligamentoNaMeta } from "@/lib/channels/meta-social/desconectar";
 import { BOT_CHANNEL_PROVIDER, desligarRoboNoFornecedor } from "@/lib/channels/bot/connect";
 import { PARTNER_CHANNEL_PROVIDER, desfazerNoProvedor } from "@/lib/channels/connect";
 import { resolverSaudeDaConexaoRemovida } from "@/lib/channels/health";
@@ -408,6 +413,8 @@ export async function DELETE(
    * estava fora do ar e a exclusão seguiu em best-effort.
    */
   let socialWebhook: "apagada" | "sem_integracao" | "falhou" | "nao_social" = "nao_social";
+  /** O desfecho de desligar a conta do canal direto com a Meta (vai para a auditoria). */
+  let metaSocial: DesligamentoNaMeta | "nao_meta_social" = "nao_meta_social";
   let parceiro: "desfeito" | "nada_a_desfazer" | "sem_credencial" | "falhou" | "nao_parceiro" = "nao_parceiro";
   let robo: "desfeito" | "sem_credencial" | "falhou" | "nao_robo" = "nao_robo";
 
@@ -459,6 +466,15 @@ export async function DELETE(
     // DEPOIS de apagar a assinatura, que pode ter sido achada pela URL dele.
     // (`meta_token_encrypted` não entra aqui de propósito: a linha social não
     // usa essa coluna — a credencial que autoriza a chamada vive na integração.)
+    patch.webhook_path_token = randomUUID().replace(/-/g, "");
+  } else if (session.provider === CHANNEL_PROVIDER_META_SOCIAL) {
+    // O canal DIRETO com a Meta: a assinatura de webhook da conta é desfeita na Meta
+    // ANTES do patch (precisa do token, que o patch zera) — best-effort, como o ramo
+    // social acima: a Meta fora do ar vai para a auditoria e NÃO desfaz a exclusão.
+    metaSocial = await desligarContaNaMeta(createAdminClient(), activeOrg.orgId, id);
+    // O token cifrado não fica guardado nem numa linha arquivada, e a URL antiga vira 404.
+    patch.social_token_encrypted = null;
+    patch.social_token_expires_at = null;
     patch.webhook_path_token = randomUUID().replace(/-/g, "");
   } else if (session.provider === BOT_CHANNEL_PROVIDER) {
     // O robô de mensagens (#3486): o webhook dele aponta para esta instalação.
@@ -602,7 +618,9 @@ export async function DELETE(
   // pelo service role (migration 9104). O filtro de organização abaixo é o
   // mesmo nos dois clientes, resolvido da sessão.
   const escritor =
-    session.zernio_credencial_da_instalacao === true || "meta_token_encrypted" in patch
+    session.zernio_credencial_da_instalacao === true ||
+    "meta_token_encrypted" in patch ||
+    "social_token_encrypted" in patch
       ? createAdminClient()
       : supabase;
   if (arquivar) {
@@ -675,6 +693,7 @@ export async function DELETE(
       avisos_fechados: avisosFechados,
       webhook_override: webhookOverride,
       social_webhook: socialWebhook,
+      meta_social_webhook: metaSocial,
       parceiro,
       robo,
       ...impact.history,

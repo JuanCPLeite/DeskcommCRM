@@ -991,6 +991,26 @@ const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
     motivo:
       "endpoint da Graph API do WhatsApp Cloud — 6 arquivos: envio de template, sincronização de modelos, validação de credencial, conversões e insights. É contrato da Meta, não escolha nossa.",
   },
+  "www.instagram.com": {
+    categoria: "FORNECEDOR",
+    motivo:
+      "diálogo de consentimento do login empresarial do Instagram (`lib/channels/meta-social/instagram-login.ts`): é para onde a pessoa é levada para autorizar a conta no app Meta da instalação, no modo Login do Instagram. Contrato da Meta, não escolha nossa.",
+  },
+  "api.instagram.com": {
+    categoria: "FORNECEDOR",
+    motivo:
+      "troca do código de autorização pelo token no login empresarial do Instagram (`lib/channels/meta-social/instagram-login.ts`): é o único endereço que a Meta oferece para esse passo, contrato dela e não escolha nossa. Só é chamado quando a instalação configura o app no modo Login do Instagram.",
+  },
+  "graph.instagram.com": {
+    categoria: "FORNECEDOR",
+    motivo:
+      "Graph API do login empresarial do Instagram (`lib/channels/meta-social/instagram-login.ts`): perfil, DM, comentários, assinatura de webhook e renovação do token das contas conectadas por esse modo. O token IGAA só fala neste host, não no graph.facebook.com. Contrato da Meta.",
+  },
+  "www.facebook.com": {
+    categoria: "FORNECEDOR",
+    motivo:
+      "diálogo de consentimento do login unificado da Meta (`lib/channels/meta-social/oauth.ts`): é para onde a pessoa é levada para autorizar a conta do Instagram no app Meta da instalação. É contrato da Meta (a Graph API não oferece outro endereço para este passo), não escolha nossa.",
+  },
   "api.telegram.org": {
     categoria: "FORNECEDOR",
     motivo:

@@ -22,6 +22,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getWahaClient } from "@/lib/waha/client";
 import { apagarAssinaturaSocial } from "@/lib/channels/social/store";
+import { desligarContaNaMeta } from "@/lib/channels/meta-social/desconectar";
 import { logger } from "@/lib/logger";
 import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
 
@@ -46,6 +47,7 @@ vi.mock("@/lib/waha/client", () => ({
 // interessa que a rota PEÇA para apagar antes de mexer na linha — apagar de
 // verdade é do módulo, coberto em `lib/channels/social/apagar-assinatura.test.ts`.
 vi.mock("@/lib/channels/social/store", () => ({ apagarAssinaturaSocial: vi.fn() }));
+vi.mock("@/lib/channels/meta-social/desconectar", () => ({ desligarContaNaMeta: vi.fn() }));
 // A credencial da linha chega CIFRADA: aqui só interessa que a rota peça para
 // decifrar a coluna intacta — decifrar de verdade é do módulo, não desta rota.
 vi.mock("@/lib/webhooks/secrets", async (importOriginal) => {
@@ -570,6 +572,67 @@ describe("DELETE /api/v1/channel-sessions/[id]", () => {
       expect(patch.webhook_path_token).toMatch(/^[a-f0-9]{32}$/);
       expect(patch.webhook_path_token).not.toBe("tokenantigo");
       expect(patch).not.toHaveProperty("meta_token_encrypted");
+    });
+  });
+  /**
+   * O canal DIRETO com a Meta: ao desconectar, a assinatura de webhook da conta é
+   * desfeita na Meta (antes de mexer na linha), o token cifrado é ZERADO (nem
+   * arquivado ele fica guardado) e a URL do token de caminho é rotacionada.
+   */
+  describe("canal META SOCIAL → desliga na Meta, zera o token e rotaciona a URL", () => {
+    const direto = (over: Linha = {}) =>
+      canal({ provider: "meta_social", waha_session_name: null, ...over });
+
+    it("desfaz a assinatura ANTES da escrita e audita o resultado, sem falar com o transporte do WhatsApp", async () => {
+      authOk();
+      const db = makeDb({ sessions: [direto({ webhook_path_token: "tokenantigo" })] });
+      vi.mocked(desligarContaNaMeta).mockImplementation(async () => {
+        db.eventos.push("meta-social:desassinar");
+        return "desfeito";
+      });
+      const waha = wahaOk(db);
+      const { DELETE } = await import("./route");
+      const res = await DELETE(reqDelete(), ctx());
+
+      expect(res.status).toBe(200);
+      expect(desligarContaNaMeta).toHaveBeenCalledWith(expect.anything(), ORG, CANAL);
+      expect(db.eventos[0]).toBe("meta-social:desassinar");
+      expect(waha.logoutSession).not.toHaveBeenCalled();
+      expect(audit).toHaveBeenCalledWith(
+        expect.objectContaining({ metadata: expect.objectContaining({ meta_social_webhook: "desfeito" }) }),
+      );
+    });
+
+    it("no arquivamento zera o token e a data de vencimento, e gira o token da URL", async () => {
+      authOk();
+      const db = makeDb({
+        sessions: [direto({ webhook_path_token: "tokenantigo" })],
+        rows: { conversations: [{ id: "c1", organization_id: ORG, channel_session_id: CANAL }] },
+      });
+      vi.mocked(desligarContaNaMeta).mockResolvedValue("desfeito");
+      wahaOk(db);
+      const { DELETE } = await import("./route");
+      const res = await DELETE(reqDelete(), ctx());
+
+      expect((await res.json()).data.archived).toBe(true);
+      const patch = db.escritas[0]?.patch as Linha;
+      expect(patch.social_token_encrypted).toBeNull();
+      expect(patch.social_token_expires_at).toBeNull();
+      expect(patch.webhook_path_token).toMatch(/^[a-f0-9]{32}$/);
+      expect(patch.webhook_path_token).not.toBe("tokenantigo");
+    });
+
+    it("a Meta fora do ar não impede a desconexão: 200 e a falha vai para a auditoria", async () => {
+      authOk();
+      const db = makeDb({ sessions: [direto()] });
+      vi.mocked(desligarContaNaMeta).mockResolvedValue("falhou");
+      wahaOk(db);
+      const { DELETE } = await import("./route");
+      const res = await DELETE(reqDelete(), ctx());
+      expect(res.status).toBe(200);
+      expect(audit).toHaveBeenCalledWith(
+        expect.objectContaining({ metadata: expect.objectContaining({ meta_social_webhook: "falhou" }) }),
+      );
     });
   });
 });

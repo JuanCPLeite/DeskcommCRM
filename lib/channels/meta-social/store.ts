@@ -1,0 +1,202 @@
+/**
+ * O acesso ao banco do canal DIRETO de Instagram/Facebook (`channel_sessions`
+ * com `provider = 'meta_social'`). Só o servidor chama isto, com o admin client —
+ * por isso toda função recebe a organização e filtra por ela, e a única que lê
+ * sem filtrar (`sessaoAtivaDaConta`) existe para responder à pergunta
+ * "esta conta já pertence a alguém?", devolvendo a organização dona.
+ */
+import { randomBytes } from "node:crypto";
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+import { metadataInicialDoCanal } from "@/lib/ai/elegibilidade/pre-go-live";
+import { lerLimiteEstourado } from "@/lib/cobranca/limites";
+import { encryptWebhookSecret } from "@/lib/webhooks/secrets";
+
+const PROVIDER = "meta_social";
+
+export interface SessaoDaConta {
+  id: string;
+  organizationId: string;
+}
+
+/** A sessão ATIVA (não arquivada) que já tem esta conta, de qualquer organização. */
+export async function sessaoAtivaDaConta(db: SupabaseClient, igId: string): Promise<SessaoDaConta | null> {
+  const { data, error } = await db
+    .from("channel_sessions")
+    .select("id, organization_id")
+    .eq("provider", PROVIDER)
+    .eq("social_account_id", igId)
+    .is("archived_at", null)
+    .maybeSingle();
+  if (error) throw new Error(`Não foi possível consultar a conta conectada: ${error.code ?? error.message}`);
+  return data ? { id: data.id as string, organizationId: data.organization_id as string } : null;
+}
+
+export interface NovaSessao {
+  organizationId: string;
+  userId: string;
+  socialAccountId: string;
+  username: string;
+  tokenCifrado: string;
+  tokenExpiraEm: Date | null;
+  webhookAssinado: boolean;
+  /** O modo em que a conta foi conectada: decide o host da Graph em tudo o que vem depois. */
+  loginModo?: "unificado" | "instagram";
+}
+
+/** Cria o canal. A IA nasce pausada (`pre_go_live`) e o limite de números do plano sobe cru para a rota dizer o número. */
+export async function criarSessao(db: SupabaseClient, nova: NovaSessao): Promise<{ id: string }> {
+  // O canal não usa o webhook por token de sessão (o da Meta é um só por app), mas
+  // a coluna do segredo é obrigatória e o token de caminho único evita sessão órfã.
+  const segredo = await encryptWebhookSecret(db, randomBytes(32).toString("hex"));
+  if (!segredo) throw new Error("cifra_indisponivel");
+  const { data, error } = await db
+    .from("channel_sessions")
+    .insert({
+      organization_id: nova.organizationId,
+      provider: PROVIDER,
+      social_account_id: nova.socialAccountId,
+      social_token_encrypted: nova.tokenCifrado,
+      social_token_expires_at: nova.tokenExpiraEm?.toISOString() ?? null,
+      webhook_secret_encrypted: segredo,
+      webhook_path_token: randomBytes(24).toString("hex"),
+      display_name: `instagram · ${nova.username || nova.socialAccountId}`,
+      status: "WORKING",
+      created_by: nova.userId,
+      metadata: {
+        ...metadataInicialDoCanal(),
+        social_platform: "instagram",
+        meta_social_webhook_assinado: nova.webhookAssinado,
+        login_modo: nova.loginModo ?? "unificado",
+      },
+    })
+    .select("id")
+    .single();
+  if (lerLimiteEstourado(error)) throw error;
+  // O índice único da conta ativa segurou: outra organização a conectou entre a consulta e a gravação.
+  if (error?.code === "23505") throw new Error("conta_ja_conectada");
+  if (error || !data) throw new Error(`Não foi possível criar o canal: ${error?.code ?? "sem retorno"}`);
+  return { id: data.id as string };
+}
+
+/** Renova token e estado da assinatura de uma sessão que a organização já tinha. */
+export async function atualizarSessao(
+  db: SupabaseClient,
+  input: {
+    organizationId: string;
+    sessionId: string;
+    tokenCifrado: string;
+    tokenExpiraEm: Date | null;
+    webhookAssinado: boolean;
+    loginModo?: "unificado" | "instagram";
+  },
+): Promise<void> {
+  const { error } = await db
+    .from("channel_sessions")
+    .update({
+      social_token_encrypted: input.tokenCifrado,
+      social_token_expires_at: input.tokenExpiraEm?.toISOString() ?? null,
+      status: "WORKING",
+    })
+    .eq("organization_id", input.organizationId)
+    .eq("id", input.sessionId);
+  if (error) throw new Error(`Não foi possível renovar o canal: ${error.code ?? error.message}`);
+  // O sinal de assinatura mora no metadata (jsonb): mescla pela função do banco seria
+  // exagero para um booleano de diagnóstico — lê, mescla e grava na mesma organização.
+  const { data } = await db
+    .from("channel_sessions")
+    .select("metadata")
+    .eq("organization_id", input.organizationId)
+    .eq("id", input.sessionId)
+    .maybeSingle();
+  const metadata = { ...((data?.metadata as Record<string, unknown> | null) ?? {}), meta_social_webhook_assinado: input.webhookAssinado, login_modo: input.loginModo ?? "unificado" };
+  await db
+    .from("channel_sessions")
+    .update({ metadata })
+    .eq("organization_id", input.organizationId)
+    .eq("id", input.sessionId);
+}
+
+/**
+ * O HISTÓRICO VOLTA: ao reconectar uma conta que a MESMA organização já teve, as conversas e mensagens
+ * dos canais arquivados dela passam para o canal novo. A conversa é presa ao canal, e sem isto a pessoa
+ * voltaria a escrever e abriria uma conversa nova, com o atendimento antigo escondido no canal arquivado.
+ *
+ * Quem decide o que é "o mesmo" é o banco: mesma organização, mesma conta (`social_account_id`) e, dentro
+ * dela, a mesma pessoa (`provider_conversation_id`). Pessoa diferente continua sendo uma conversa à parte,
+ * e a conta de OUTRA organização nunca entra (todo filtro leva `organization_id`).
+ *
+ * O banco só aceita UMA conversa por contato e canal (`conversations_unique_per_contact_session`). Por isso:
+ *  - a pessoa SEM conversa no canal novo: a conversa antiga é MOVIDA, com as mensagens;
+ *  - a pessoa que JÁ escreveu no canal novo: as mensagens da antiga são JUNTADAS na conversa nova e a
+ *    antiga é arquivada (nada é apagado, e o histórico fica inteiro numa conversa só).
+ */
+export async function adotarHistoricoDaConta(
+  db: SupabaseClient,
+  input: { organizationId: string; sessaoNovaId: string; socialAccountId: string },
+): Promise<{ conversas: number; juntadas: number }> {
+  const { data: antigos, error } = await db
+    .from("channel_sessions")
+    .select("id")
+    .eq("organization_id", input.organizationId)
+    .eq("provider", PROVIDER)
+    .eq("social_account_id", input.socialAccountId)
+    .neq("id", input.sessaoNovaId)
+    .not("archived_at", "is", null)
+    .limit(20);
+  if (error || !antigos?.length) return { conversas: 0, juntadas: 0 };
+
+  const { data: jaTem } = await db
+    .from("conversations")
+    .select("id, provider_conversation_id")
+    .eq("organization_id", input.organizationId)
+    .eq("channel_session_id", input.sessaoNovaId);
+  const ocupadas = new Map<string, string>();
+  for (const c of jaTem ?? []) {
+    if (c.provider_conversation_id) ocupadas.set(c.provider_conversation_id as string, c.id as string);
+  }
+
+  let movidas = 0;
+  let juntadas = 0;
+  for (const antigo of antigos) {
+    const { data: conversas } = await db
+      .from("conversations")
+      .select("id, provider_conversation_id")
+      .eq("organization_id", input.organizationId)
+      .eq("channel_session_id", antigo.id as string);
+    for (const c of conversas ?? []) {
+      const pessoa = (c.provider_conversation_id as string | null) ?? null;
+      const destino = pessoa !== null ? ocupadas.get(pessoa) : undefined;
+      if (destino) {
+        // Junta: as mensagens vão para a conversa viva do canal novo, e a antiga sai de cena.
+        const { error: eMsgs } = await db
+          .from("messages")
+          .update({ conversation_id: destino, channel_session_id: input.sessaoNovaId })
+          .eq("organization_id", input.organizationId)
+          .eq("conversation_id", c.id as string);
+        if (eMsgs) continue;
+        await db
+          .from("conversations")
+          .update({ status: "archived", status_changed_at: new Date().toISOString() })
+          .eq("organization_id", input.organizationId)
+          .eq("id", c.id as string);
+        juntadas += 1;
+        continue;
+      }
+      const { error: eConversa } = await db
+        .from("conversations")
+        .update({ channel_session_id: input.sessaoNovaId })
+        .eq("organization_id", input.organizationId)
+        .eq("id", c.id as string);
+      if (eConversa) continue;
+      await db
+        .from("messages")
+        .update({ channel_session_id: input.sessaoNovaId })
+        .eq("organization_id", input.organizationId)
+        .eq("conversation_id", c.id as string);
+      if (pessoa !== null) ocupadas.set(pessoa, c.id as string);
+      movidas += 1;
+    }
+  }
+  return { conversas: movidas, juntadas };
+}

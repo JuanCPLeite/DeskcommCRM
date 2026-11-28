@@ -34,6 +34,11 @@ export const PUBLIC_PATHS: RegExp[] = [
   // `FORMATO_DO_ESTADO` (lib/channels/estado-da-volta.ts): nenhum outro sub-path
   // nasce público de carona.
   /^\/auth\/partner-return\/[A-Za-z0-9_-]{20,600}\.[0-9a-f]{64}$/,
+  // Volta do login unificado da Meta (conexão direta de Instagram/Facebook): mesma
+  // natureza da linha acima — vem de outro site, o cookie Strict não viaja, e a rota
+  // é só a ponte para a tela autenticada, sem efeito (app/auth/meta-social-return).
+  // Âncora `$`: nenhum sub-path nasce público de carona.
+  /^\/auth\/meta-social-return$/,
   // Volta do provedor de pagamento (checkout, portal): mesma natureza da linha
   // acima — vem de outro site, o cookie Strict não viaja, e a rota é só a ponte
   // para um destino FIXO (`app/cobranca/volta/route.ts`), sem efeito.
@@ -285,7 +290,7 @@ export const PUBLIC_PATHS: RegExp[] = [
   // exigir sessão para LER o que se está aceitando inverte a ordem. Âncorado nos
   // dois nomes de propósito: `/^\/legal/` deixaria qualquer sub-path futuro
   // nascer público de carona.
-  /^\/legal\/(terms|privacy)$/,
+  /^\/legal\/(terms|privacy|data-deletion)$/,
 ];
 
 export function isPublicPath(pathname: string): boolean {

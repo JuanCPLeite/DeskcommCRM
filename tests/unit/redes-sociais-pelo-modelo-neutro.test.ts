@@ -144,6 +144,8 @@ describe("CONTROLE: os canais que já existiam continuam declarados", () => {
       "meta_cloud",
       "zernio",
       "zernio_social",
+      // A conexão direta com a Meta (Instagram/Facebook), ao lado do intermediado.
+      "meta_social",
       "datafy",
       // O canal do bot do Telegram (#3440) é provider de MENSAGEM, com matriz
       // de capabilities própria — a matriz continua respondendo por todos.

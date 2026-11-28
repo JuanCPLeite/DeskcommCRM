@@ -3,6 +3,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+import { MetaSocialClient } from "./MetaSocialClient";
 import { RedesSociaisClient } from "./RedesSociaisClient";
 import { CanalBotClient } from "./CanalBotClient";
 import { CanalGraphParceiroClient } from "./CanalGraphParceiroClient";
@@ -74,6 +75,8 @@ export function ConexoesShell({
   const aba =
     abaParam === "sociais"
       ? "sociais"
+      : abaParam === "meta-social"
+      ? "meta-social"
       : abaParam === "oficial"
       ? "oficial"
       : abaParam === "parceiro"
@@ -121,6 +124,7 @@ export function ConexoesShell({
         <TabsTrigger value="parceiro">{t("Provedor parceiro")}</TabsTrigger>
         <TabsTrigger value="telefonia">{t("Telefone")}</TabsTrigger>
         <TabsTrigger value="sociais">{t("Redes sociais")}</TabsTrigger>
+        <TabsTrigger value="meta-social">{t("Instagram")}</TabsTrigger>
         <TabsTrigger value="voz">{t("Chamada de voz")}</TabsTrigger>
         {graphParceiro && <TabsTrigger value="graph">{graphParceiro.label}</TabsTrigger>}
         {bot && <TabsTrigger value="bot">{bot.label}</TabsTrigger>}
@@ -145,6 +149,7 @@ export function ConexoesShell({
         <TelefoniaClient podeCriarAgente={podeCriarAgenteDeVoz} />
       </TabsContent>
       <TabsContent value="sociais" className="mt-0"><RedesSociaisClient /></TabsContent>
+      <TabsContent value="meta-social" className="mt-0"><MetaSocialClient /></TabsContent>
 
       <TabsContent value="voz" className="mt-0">
         <CanalVozClient wacallsConfigured={wacallsConfigured} />

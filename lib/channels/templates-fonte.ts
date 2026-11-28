@@ -44,6 +44,8 @@ const FONTE: Record<ProviderDeMensagem, FonteDeTemplates | null> = {
   meta_cloud: "oficial",
   zernio: "parceiro",
   zernio_social: null,
+  // Sem modelo: a rede não tem definição aprovada a listar.
+  meta_social: null,
   // Parceiro Graph-compatível: os modelos são os da Cloud API, servidos por uma
   // rota própria (host/token do parceiro).
   datafy: "graph",

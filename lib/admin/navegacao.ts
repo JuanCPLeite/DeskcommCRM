@@ -163,6 +163,13 @@ export const ADMIN_DESTINATIONS: readonly AdminDestination[] = [
     icon: WebhooksLogo,
   },
   {
+    href: "/admin/meta-social",
+    label: "Instagram e Facebook (Meta)",
+    description: "App Meta: chave secreta, token do webhook e IDs para conectar as contas do Instagram e do Facebook",
+    group: "canais",
+    icon: WebhooksLogo,
+  },
+  {
     href: "/admin/email",
     label: "E-mail",
     description: "Servidor SMTP: host, porta, remetente e senha",

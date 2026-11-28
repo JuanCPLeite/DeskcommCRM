@@ -21,6 +21,12 @@ export type ChannelProvider =
   | "meta_cloud"
   | "zernio"
   | "zernio_social"
+  /**
+   * Instagram/Facebook pela conexão DIRETA com a Meta (app Meta da instalação),
+   * ao lado do `zernio_social`, que continua existindo. Endereça a conta pelo
+   * id da própria Meta (`channel_sessions.social_account_id`).
+   */
+  | "meta_social"
   | "wacalls"
   | "datafy"
   /**
