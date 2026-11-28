@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   assinarWebhooks,
   contasAtribuidas,
+  desassinarWebhooks,
   expiracaoDoToken,
   perfilDaConta,
   SemContaAtribuidaError,
@@ -53,6 +54,20 @@ describe("graph do canal Meta social", () => {
   it("falha de assinatura devolve false em vez de derrubar a conexão (fica visível na tela)", async () => {
     vi.stubGlobal("fetch", resposta({ error: { message: "x" } }, 400));
     expect(await assinarWebhooks("t", "1784")).toBe(false);
+  });
+
+  it("desassina o webhook da conta (DELETE) e devolve se deu certo", async () => {
+    const f = resposta({ success: true });
+    vi.stubGlobal("fetch", f);
+    expect(await desassinarWebhooks("TOKEN-SECRETO", "1784")).toBe(true);
+    const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+    expect(String(url)).toMatch(/\/1784\/subscribed_apps$/);
+    expect(init.method).toBe("DELETE");
+    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer TOKEN-SECRETO");
+    vi.stubGlobal("fetch", resposta({ error: {} }, 400));
+    expect(await desassinarWebhooks("t", "1784")).toBe(false);
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("rede"); }));
+    expect(await desassinarWebhooks("t", "1784")).toBe(false);
   });
 
   it("expiração: 0 da Meta significa que não expira; senão, a data", async () => {

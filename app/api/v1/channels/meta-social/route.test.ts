@@ -29,7 +29,24 @@ vi.mock("@/lib/auth/require-role", () => ({
 vi.mock("@/lib/auth/server", () => ({ mfaEmDivida: async () => mfaPendente }));
 vi.mock("@/lib/ai/dispatcher/rate-limit", () => ({ checkRateLimit: async () => ({ allowed: limiteOk }) }));
 vi.mock("@/lib/audit", () => ({ audit: (...a: unknown[]) => audit(...a) }));
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
+let contasDoBanco: Record<string, unknown>[] = [];
+let erroDaListagem: { code: string } | null = null;
+let appConfigurado: { appId: string | null; loginConfigId: string | null; appSecret: string | null; verifyToken: string | null } = {
+  appId: "1", loginConfigId: "2", appSecret: "s".repeat(32), verifyToken: "v",
+};
+vi.mock("@/lib/channels/meta-social/app", () => ({ appSocialDaMeta: async () => appConfigurado }));
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: () => {
+    const q: Record<string, unknown> = {
+      select: () => q,
+      eq: () => q,
+      is: () => q,
+      order: () => q,
+      then: (ok: (v: unknown) => unknown) => Promise.resolve({ data: erroDaListagem ? null : contasDoBanco, error: erroDaListagem }).then(ok),
+    };
+    return { from: () => q };
+  },
+}));
 vi.mock("@/lib/webhooks/url-publica", () => ({
   basePublicaConfiguradaDaInstalacao: () => "https://crm.exemplo.com",
 }));
@@ -44,7 +61,7 @@ vi.mock("@/lib/channels/meta-social/conectar", async () => {
 });
 
 import { ErroDaConexaoMeta } from "@/lib/channels/meta-social/conectar";
-import { POST } from "./route";
+import { GET, POST } from "./route";
 
 const ESTADO = `${"A".repeat(40)}.${"a".repeat(64)}`;
 
@@ -62,6 +79,57 @@ beforeEach(() => {
   mfaPendente = false;
   suporteBloqueia = false;
   limiteOk = true;
+  contasDoBanco = [];
+  erroDaListagem = null;
+  appConfigurado = { appId: "1", loginConfigId: "2", appSecret: "s".repeat(32), verifyToken: "v" };
+});
+
+describe("GET /api/v1/channels/meta-social", () => {
+  const conta = (over: Record<string, unknown> = {}) => ({
+    id: "canal-1",
+    display_name: "instagram · loja",
+    social_account_id: "17841400000000001",
+    status: "WORKING",
+    meta_social_token_expires_at: null,
+    metadata: { meta_social_webhook_assinado: true },
+    created_at: "2026-11-27T12:00:00Z",
+    ...over,
+  });
+  const reqGet = () => new Request("https://crm.exemplo.com/api/v1/channels/meta-social") as never;
+
+  it("lista as contas conectadas da organização, sem NENHUM campo de token", async () => {
+    contasDoBanco = [conta(), conta({ id: "canal-2", social_account_id: "2" })];
+    const r = await GET(reqGet());
+    expect(r.status).toBe(200);
+    const { data } = await r.json();
+    expect(data.configured).toBe(true);
+    expect(data.accounts).toHaveLength(2);
+    expect(data.accounts[0]).toMatchObject({ channel_id: "canal-1", ig_id: "17841400000000001", username: "loja", health: "ok", webhook_assinado: true });
+    expect(JSON.stringify(data)).not.toMatch(/token_encrypted|meta_social_token/);
+  });
+
+  it("token vencido pela data gravada aparece como `token_vencido`; webhook não assinado, como pendência", async () => {
+    contasDoBanco = [conta({ meta_social_token_expires_at: new Date(Date.now() - 1000).toISOString(), metadata: { meta_social_webhook_assinado: false } })];
+    const { data } = await (await GET(reqGet())).json();
+    expect(data.accounts[0]).toMatchObject({ health: "token_vencido", webhook_assinado: false });
+  });
+
+  it("app Meta não configurado: configured=false e o que falta; a lista continua vindo", async () => {
+    appConfigurado = { appId: "1", loginConfigId: null, appSecret: null, verifyToken: null };
+    contasDoBanco = [conta()];
+    const { data } = await (await GET(reqGet())).json();
+    expect(data.configured).toBe(false);
+    expect(data.faltam).toEqual(["loginConfigId", "appSecret"]);
+    expect(data.accounts).toHaveLength(1);
+  });
+
+  it("recusa quem não é admin, e a falha de leitura vira 500 em vez de lista vazia", async () => {
+    papelOk = false;
+    expect((await GET(reqGet())).status).toBe(403);
+    papelOk = true;
+    erroDaListagem = { code: "XX000" };
+    expect((await GET(reqGet())).status).toBe(500);
+  });
 });
 
 describe("POST /api/v1/channels/meta-social", () => {

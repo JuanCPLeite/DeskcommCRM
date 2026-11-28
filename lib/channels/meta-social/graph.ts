@@ -81,6 +81,23 @@ export async function assinarWebhooks(token: string, igId: string): Promise<bool
   }
 }
 
+/** Desfaz a assinatura do webhook da conta. `false` (e não exceção) quando a Meta recusa ou não responde. */
+export async function desassinarWebhooks(token: string, igId: string): Promise<boolean> {
+  try {
+    const resposta = await fetch(`${graphBaseUrl()}/${encodeURIComponent(igId)}/subscribed_apps`, {
+      method: "DELETE",
+      headers: cabecalho(token),
+      cache: "no-store",
+      redirect: "error",
+    });
+    if (!resposta.ok) return false;
+    const corpo = await lerJson<{ success?: boolean }>(resposta);
+    return Boolean(corpo.success);
+  } catch {
+    return false;
+  }
+}
+
 /** Quando o token vence; `null` se não vence ou se a consulta falhou. */
 export async function expiracaoDoToken(input: {
   token: string;

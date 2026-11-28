@@ -1,4 +1,6 @@
 /**
+ * GET  /api/v1/channels/meta-social — as contas Instagram conectadas da organização, a saúde
+ *       de cada uma e se o app Meta da instalação está configurado (nunca devolve token).
  * POST /api/v1/channels/meta-social — conectar contas Instagram pelo login unificado.
  *
  *   { acao: "iniciar" }                     → { url } do diálogo de consentimento da Meta;
@@ -19,6 +21,7 @@ import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { mfaEmDivida } from "@/lib/auth/server";
+import { appSocialDaMeta } from "@/lib/channels/meta-social/app";
 import { ErroDaConexaoMeta, concluirConexaoMeta, iniciarConexaoMeta } from "@/lib/channels/meta-social/conectar";
 import { traduzirLimiteDoPlano } from "@/lib/cobranca/limites";
 import { env } from "@/lib/env";
@@ -57,6 +60,65 @@ const STATUS_DO_ERRO: Record<ErroDaConexaoMeta["codigo"], number> = {
   troca_do_codigo_falhou: 400,
   cifra_indisponivel: 422,
 };
+
+interface LinhaDaConta {
+  id: string;
+  display_name: string | null;
+  social_account_id: string | null;
+  status: string | null;
+  meta_social_token_expires_at: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export async function GET(_req?: NextRequest): Promise<NextResponse> {
+  const requestId = randomUUID();
+  const authz = await requireRole("admin", { requestId, resource: "channels_meta_social" });
+  if (!authz.ok) return authz.response;
+  const t = (texto: string) => traduzir(texto, authz.user.idioma);
+
+  // Colunas EXPLÍCITAS: o token cifrado nunca entra na seleção.
+  const { data, error } = await createAdminClient()
+    .from("channel_sessions")
+    .select("id, display_name, social_account_id, status, meta_social_token_expires_at, metadata, created_at")
+    .eq("organization_id", authz.org.orgId)
+    .eq("provider", "meta_social")
+    .is("archived_at", null)
+    .order("created_at", { ascending: true });
+  if (error) {
+    logger.warn("[channels.meta-social] não deu para listar as contas", { organization_id: authz.org.orgId, codigo: error.code });
+    return fail("internal_error", t("Não foi possível carregar as contas do Instagram."), 500, { requestId, headers });
+  }
+
+  const app = await appSocialDaMeta();
+  const faltam = (["appId", "loginConfigId", "appSecret"] as const).filter((c) => !app[c]);
+
+  const agora = Date.now();
+  const contas = ((data ?? []) as LinhaDaConta[]).map((c) => {
+    const vencido = c.meta_social_token_expires_at !== null && new Date(c.meta_social_token_expires_at).getTime() <= agora;
+    return {
+      channel_id: c.id,
+      ig_id: c.social_account_id,
+      username: (c.display_name ?? "").replace(/^instagram\s*·\s*/i, ""),
+      status: c.status,
+      health: vencido ? "token_vencido" : c.status === "WORKING" ? "ok" : "atencao",
+      token_expires_at: c.meta_social_token_expires_at,
+      webhook_assinado: c.metadata?.meta_social_webhook_assinado === true,
+      connected_at: c.created_at,
+    };
+  });
+
+  return ok(
+    {
+      configured: faltam.length === 0,
+      faltam,
+      // Quem administra a PLATAFORMA configura o app; o admin da empresa só vê o aviso.
+      configurar_em: authz.user.is_platform_admin ? "/admin/meta-social" : null,
+      accounts: contas,
+    },
+    { requestId, headers },
+  );
+}
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const supportDenied = await requireSupportWrite();

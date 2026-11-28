@@ -288,6 +288,19 @@ export const CHANNEL_PROVIDER_WAHA: ChannelProvider = "waha";
 export const CHANNEL_PROVIDER_META: ChannelProvider = "meta_cloud";
 export const CHANNEL_PROVIDER_SOCIAL: ChannelProvider = "zernio_social";
 export const CHANNEL_PROVIDER_ZERNIO: ChannelProvider = "zernio";
+/** A conexão direta com a Meta (Instagram/Facebook), ao lado do intermediado. */
+export const CHANNEL_PROVIDER_META_SOCIAL: ChannelProvider = "meta_social";
+
+/**
+ * A sessão é de REDE SOCIAL, por qualquer dos transportes (o intermediado e a
+ * conexão direta com a Meta)? É a pergunta de quem trata Instagram/Facebook como
+ * família — lista de Conexões, testadores da IA, desligar — sem escolher o
+ * transporte. Quem precisa de um transporte específico compara com a constante
+ * dele.
+ */
+export function ehCanalSocial(provider: string | null | undefined): boolean {
+  return provider === CHANNEL_PROVIDER_SOCIAL || provider === CHANNEL_PROVIDER_META_SOCIAL;
+}
 /**
  * Os canais cuja entrada responde ANTES de processar a mensagem nova — o porquê
  * está em `./inbound.ts`, que o reexporta. Mora aqui, num módulo sem dependência,

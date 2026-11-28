@@ -13052,6 +13052,23 @@ export const DICIONARIO: Traducoes = {
   },
   "Falta cadastrar o aplicativo do Google desta instalação. Leva um minuto e você faz por aqui mesmo.": { es: "Falta registrar la aplicación de Google de esta instalación. Toma un minuto y lo haces aquí mismo." },
 
+  // ─── A aba Instagram em Conexões (conexão direta com a Meta) ───
+  "Instagram pela Meta": { es: "Instagram con Meta" },
+  "Conecte contas do Instagram direto pelo app Meta da instalação. As conversas chegam na Caixa de Entrada.": { es: "Conecta cuentas de Instagram directamente con la app de Meta de la instalación. Las conversaciones llegan a la Bandeja de entrada." },
+  "O app Meta desta instalação ainda não está configurado.": { es: "La app de Meta de esta instalación aún no está configurada." },
+  "Configurar o app": { es: "Configurar la app" },
+  "Conectar Instagram": { es: "Conectar Instagram" },
+  "Concluindo a conexão com a Meta…": { es: "Finalizando la conexión con Meta…" },
+  "Nenhuma conta do Instagram conectada ainda.": { es: "Aún no hay ninguna cuenta de Instagram conectada." },
+  "O acesso venceu. Reconecte.": { es: "El acceso venció. Vuelve a conectar." },
+  "Precisa de atenção": { es: "Requiere atención" },
+  "Webhook pendente: as mensagens podem não chegar. Reconecte a conta.": { es: "Webhook pendiente: es posible que los mensajes no lleguen. Vuelve a conectar la cuenta." },
+  "O CRM deixa de receber e enviar mensagens dessa conta. As conversas já feitas continuam na Caixa de Entrada.": { es: "El CRM deja de recibir y enviar mensajes de esa cuenta. Las conversaciones ya hechas siguen en la Bandeja de entrada." },
+  "Esta conta já está conectada em outra empresa e não foi adicionada.": { es: "Esta cuenta ya está conectada en otra empresa y no se agregó." },
+  "Não foi possível concluir a conexão.": { es: "No se pudo completar la conexión." },
+  "Não foi possível desconectar. Tente novamente.": { es: "No se pudo desconectar. Inténtalo de nuevo." },
+  "A conexão foi cancelada na Meta.": { es: "La conexión se canceló en Meta." },
+
   // ─── O app Meta SOCIAL da instalação (/admin/meta-social, migration 9513) ───
   "Instagram e Facebook da Meta desta instalação": { es: "Instagram y Facebook de Meta de esta instalación" },
   "Credenciais do app Meta que conecta as contas do Instagram e do Facebook pelo login unificado. Elas valem para a instalação inteira — cada empresa conecta as próprias contas depois, em Conexões.": { es: "Credenciales de la app de Meta que conecta las cuentas de Instagram y Facebook con el inicio de sesión unificado. Se aplican a toda la instalación. Cada empresa conecta después sus propias cuentas, en Conexiones." },
