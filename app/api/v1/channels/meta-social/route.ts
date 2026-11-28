@@ -22,6 +22,7 @@ import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { mfaEmDivida } from "@/lib/auth/server";
 import { appSocialDaMeta } from "@/lib/channels/meta-social/app";
+import { perfilDaSessao } from "@/lib/channels/meta-social/perfil-da-conta";
 import { ErroDaConexaoMeta, concluirConexaoMeta, iniciarConexaoMeta } from "@/lib/channels/meta-social/conectar";
 import { traduzirLimiteDoPlano } from "@/lib/cobranca/limites";
 import { env } from "@/lib/env";
@@ -67,6 +68,7 @@ interface LinhaDaConta {
   social_account_id: string | null;
   status: string | null;
   social_token_expires_at: string | null;
+  social_token_encrypted?: string | null;
   metadata: Record<string, unknown> | null;
   created_at: string;
 }
@@ -80,7 +82,7 @@ export async function GET(_req?: NextRequest): Promise<NextResponse> {
   // Colunas EXPLÍCITAS: o token cifrado nunca entra na seleção.
   const { data, error } = await createAdminClient()
     .from("channel_sessions")
-    .select("id, display_name, social_account_id, status, social_token_expires_at, metadata, created_at")
+    .select("id, display_name, social_account_id, status, social_token_expires_at, social_token_encrypted, metadata, created_at")
     .eq("organization_id", authz.org.orgId)
     .eq("provider", "meta_social")
     .is("archived_at", null)
@@ -96,7 +98,22 @@ export async function GET(_req?: NextRequest): Promise<NextResponse> {
   const faltam = obrigatorios.filter((c) => !app[c]);
 
   const agora = Date.now();
-  const contas = ((data ?? []) as LinhaDaConta[]).map((c) => {
+  // O perfil de cada conta (foto, @, seguidores…): o guardado, ou relido na Meta quando venceu. Em paralelo e
+  // sem lançar — a lista nunca deixa de abrir porque a Meta demorou.
+  const admin = createAdminClient();
+  const linhas = (data ?? []) as LinhaDaConta[];
+  const perfis = await Promise.all(
+    linhas.map((c) =>
+      perfilDaSessao(admin, {
+        id: c.id,
+        organizationId: authz.org.orgId,
+        igId: c.social_account_id ?? "",
+        cifrado: c.social_token_encrypted ?? null,
+        metadata: c.metadata,
+      }),
+    ),
+  );
+  const contas = linhas.map((c, i) => {
     const vencido = c.social_token_expires_at !== null && new Date(c.social_token_expires_at).getTime() <= agora;
     return {
       channel_id: c.id,
@@ -107,6 +124,7 @@ export async function GET(_req?: NextRequest): Promise<NextResponse> {
       token_expires_at: c.social_token_expires_at,
       webhook_assinado: c.metadata?.meta_social_webhook_assinado === true,
       connected_at: c.created_at,
+      perfil: perfis[i] ?? null,
     };
   });
 

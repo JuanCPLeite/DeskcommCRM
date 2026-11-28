@@ -30,6 +30,17 @@ interface Conta {
   username: string;
   health: "ok" | "token_vencido" | "atencao";
   webhook_assinado: boolean;
+  perfil?: PerfilDaConta | null;
+}
+
+interface PerfilDaConta {
+  nome: string | null;
+  usuario: string | null;
+  bio: string | null;
+  foto: string | null;
+  seguidores: number | null;
+  seguindo: number | null;
+  posts: number | null;
 }
 
 interface Listagem {
@@ -38,6 +49,71 @@ interface Listagem {
 
 interface Conclusao {
   data: { conectadas: { username: string }[]; recusadas: { ig_id: string }[] };
+}
+
+/** Número do cartão em português: 953.970 — e "—" quando a Meta não devolveu. */
+function formatarNumero(n: number | null | undefined): string {
+  return typeof n === "number" ? n.toLocaleString("pt-BR") : "—";
+}
+
+function Iniciais({ nome }: { nome: string }) {
+  const letras = nome.replace(/^@/, "").trim().slice(0, 2).toUpperCase() || "IG";
+  return (
+    <div
+      aria-hidden
+      className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-muted text-base font-semibold text-muted-foreground"
+    >
+      {letras}
+    </div>
+  );
+}
+
+/** Foto, nome, @, bio e os três números da conta. A foto some e vira iniciais se o endereço da Meta vencer. */
+function CabecalhoDaConta({ conta, t }: { conta: Conta; t: (texto: string) => string }) {
+  const [fotoQuebrou, setFotoQuebrou] = useState(false);
+  const p = conta.perfil ?? null;
+  const arroba = `@${p?.usuario || conta.username || conta.ig_id}`;
+  return (
+    <div className="flex items-start gap-3" data-testid="meta-social-perfil">
+      {p?.foto && !fotoQuebrou ? (
+        // eslint-disable-next-line @next/next/no-img-element -- o app não usa next/image; o endereço é da CDN da Meta.
+        <img
+          src={p.foto}
+          alt=""
+          width={56}
+          height={56}
+          referrerPolicy="no-referrer"
+          className="h-14 w-14 shrink-0 rounded-full object-cover"
+          onError={() => setFotoQuebrou(true)}
+        />
+      ) : (
+        <Iniciais nome={p?.nome || arroba} />
+      )}
+      <div className="flex min-w-0 flex-col gap-1">
+        <div className="flex flex-col">
+          {p?.nome ? <span className="truncate font-medium">{p.nome}</span> : null}
+          <span className={p?.nome ? "truncate text-sm text-muted-foreground" : "truncate font-medium"}>{arroba}</span>
+        </div>
+        {p?.bio ? <p className="line-clamp-2 whitespace-pre-line text-xs text-muted-foreground">{p.bio}</p> : null}
+        {p ? (
+          <dl className="mt-1 flex gap-4 text-xs">
+            <div>
+              <dt className="text-muted-foreground">{t("Postagens")}</dt>
+              <dd className="font-medium tabular-nums">{formatarNumero(p.posts)}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">{t("Seguidores")}</dt>
+              <dd className="font-medium tabular-nums">{formatarNumero(p.seguidores)}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">{t("Seguindo")}</dt>
+              <dd className="font-medium tabular-nums">{formatarNumero(p.seguindo)}</dd>
+            </div>
+          </dl>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
 const CHAVE = ["meta-social-contas"] as const;
@@ -207,8 +283,8 @@ export function MetaSocialClient() {
       {dados?.accounts.map((c) => (
         <Card key={c.channel_id} data-testid="meta-social-conta" className="flex flex-col gap-3 p-4">
           <div className="flex items-center justify-between gap-3">
-            <div className="flex flex-col gap-1">
-              <span className="font-medium">@{c.username || c.ig_id}</span>
+            <div className="flex min-w-0 flex-col gap-2">
+              <CabecalhoDaConta conta={c} t={t} />
               <div className="flex flex-wrap gap-2">
                 {c.health === "ok" ? <Badge variant="neutral">{t("Conectada")}</Badge> : null}
                 {c.health === "token_vencido" ? <Badge variant="warning">{t("O acesso venceu. Reconecte.")}</Badge> : null}

@@ -119,7 +119,8 @@ describe("GET /api/v1/channels/meta-social", () => {
     contasDoBanco = [conta()];
     const { data } = await (await GET(reqGet())).json();
     expect(data.configured).toBe(false);
-    expect(data.faltam).toEqual(["loginConfigId", "appSecret"]);
+    // Sem ID da configuração o modo é o do Login do Instagram, que dispensa esse campo: só a chave falta.
+    expect(data.faltam).toEqual(["appSecret"]);
     expect(data.accounts).toHaveLength(1);
   });
 
