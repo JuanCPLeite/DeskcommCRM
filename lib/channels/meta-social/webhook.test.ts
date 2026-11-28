@@ -145,7 +145,17 @@ describe("DM entregue como mudança (`changes` com field messages) e o desenho d
 
   it("o desenho não leva conteúdo: só contas, quantidade de messaging e nomes de campo", () => {
     const d = desenhoDaEntrega(corpo({ sender: { id: "999" }, message: { mid: "m", text: "segredo da conversa" } }));
-    expect(d).toEqual({ objeto: "instagram", entradas: [{ conta: "17841400000000001", messaging: 0, campos: ["messages"] }] });
+    expect(d).toEqual({ objeto: "instagram", entradas: [{ conta: "17841400000000001", chaves: ["id", "time", "changes"], messaging: 0, campos: ["messages"] }] });
     expect(JSON.stringify(d)).not.toContain("segredo");
+  });
+});
+
+describe("standby", () => {
+  it("a DM entregue em `standby` é lida como a mesma DM de `messaging`", () => {
+    const [e] = parseMetaSocialWebhook({
+      object: "instagram",
+      entry: [{ id: "17841400000000001", time: 1795000000, standby: [{ sender: { id: "999" }, recipient: { id: "17841400000000001" }, timestamp: "1795000000", message: { mid: "mid-s", text: "oi" } }] }],
+    });
+    expect(e).toMatchObject({ tipo: "mensagem", participanteId: "999", mid: "mid-s", texto: "oi" });
   });
 });

@@ -158,9 +158,13 @@ export function parseMetaSocialWebhook(raw: unknown): MetaSocialEvento[] {
     const entrada = obj(e);
     const contaId = id(entrada?.id);
     if (!entrada || !contaId) continue;
-    for (const item of Array.isArray(entrada.messaging) ? entrada.messaging : []) {
-      const ev = doItemDeMensagem(contaId, entrada.time, item);
-      if (ev) eventos.push(ev);
+    // `standby` leva itens do MESMO desenho que `messaging`: a Meta os entrega ali quando outro app é o
+    // receptor principal da conversa (protocolo de passagem). Para o CRM é a mesma DM.
+    for (const lista of [entrada.messaging, entrada.standby]) {
+      for (const item of Array.isArray(lista) ? lista : []) {
+        const ev = doItemDeMensagem(contaId, entrada.time, item);
+        if (ev) eventos.push(ev);
+      }
     }
     for (const item of Array.isArray(entrada.changes) ? entrada.changes : []) {
       const ev = doItemDeMudanca(contaId, entrada.time, item);
@@ -175,7 +179,10 @@ export function parseMetaSocialWebhook(raw: unknown): MetaSocialEvento[] {
  * `changes`) e quais campos. É o que o log mostra, para a próxima entrega que o leitor não entender
  * (ou que vier de uma conta que ninguém conectou) ter um rastro.
  */
-export function desenhoDaEntrega(raw: unknown): { objeto: string | null; entradas: { conta: string | null; messaging: number; campos: string[] }[] } {
+export function desenhoDaEntrega(raw: unknown): {
+  objeto: string | null;
+  entradas: { conta: string | null; chaves: string[]; messaging: number; campos: string[] }[];
+} {
   const corpo = obj(raw);
   const entradas = Array.isArray(corpo?.entry) ? (corpo.entry as unknown[]) : [];
   return {
@@ -184,6 +191,8 @@ export function desenhoDaEntrega(raw: unknown): { objeto: string | null; entrada
       const entrada = obj(e);
       return {
         conta: id(entrada?.id),
+        // Os NOMES das chaves da entrada (nunca os valores): mostram em que lugar a Meta pôs o conteúdo.
+        chaves: Object.keys(entrada ?? {}).slice(0, 12),
         messaging: Array.isArray(entrada?.messaging) ? entrada.messaging.length : 0,
         campos: (Array.isArray(entrada?.changes) ? (entrada.changes as unknown[]) : []).map((c) => texto(obj(c)?.field) ?? "?").slice(0, 10),
       };
