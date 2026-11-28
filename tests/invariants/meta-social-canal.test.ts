@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { sql } from "./gov-helpers";
 
 /**
- * O canal DIRETO com a Meta (Instagram/Facebook): migration 9454.
+ * O canal DIRETO com a Meta (Instagram/Facebook): migration 9513.
  *
  * Prova o que o banco decide e o TypeScript não vê: o vocabulário do provider, a
  * coluna de endereço do canal, a unicidade da conta entre organizações e a

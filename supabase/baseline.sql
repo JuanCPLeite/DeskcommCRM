@@ -9590,7 +9590,7 @@ alter table public.channel_sessions
   add column if not exists telegram_bot_id text,
   add column if not exists telegram_token_encrypted bytea;
 
--- meta_social (migration 9454) — canal DIRETO com a Meta; as colunas nascem
+-- meta_social (migration 9513) — canal DIRETO com a Meta; as colunas nascem
 -- ANTES das constraints abaixo, que as referenciam.
 alter table public.channel_sessions
   add column if not exists social_account_id text,
@@ -9603,7 +9603,7 @@ alter table public.channel_sessions
 alter table public.channel_sessions
   add constraint channel_sessions_provider_check
   -- 'wacalls' (0233), 'zernio_social' (0368), 'datafy' (0387) e 'telegram'
-  -- (9342) e 'meta_social' (9454) somados AQUI — UM bloco só por constraint
+  -- (9342) e 'meta_social' (9513) somados AQUI — UM bloco só por constraint
   -- (não duplicar drop+add por migration).
   check (provider = any (array['waha'::text, 'meta_cloud'::text, 'zernio'::text, 'wacalls'::text, 'zernio_social'::text, 'datafy'::text, 'telegram'::text, 'meta_social'::text]));
 
@@ -9621,7 +9621,7 @@ alter table public.channel_sessions
     (provider = 'datafy'     and datafy_phone_number_id is not null) or
     -- Bot do Telegram (migration 9342): endereça pelo id do robô.
     (provider = 'telegram'   and telegram_bot_id      is not null) or
-    -- Conexão direta com a Meta (migration 9454): endereça pelo id da conta.
+    -- Conexão direta com a Meta (migration 9513): endereça pelo id da conta.
     (provider = 'meta_social' and social_account_id    is not null)
   );
 
@@ -14812,7 +14812,7 @@ alter table public.webhook_events_log
     -- robô logava "não consegui abrir a linha" e o corpo cru não era guardado
     -- (medido na prova de tela). O corpo do update não carrega o token.
     'telegram',
-    -- (migration 9454) a conexão direta com a Meta (Instagram/Facebook).
+    -- (migration 9513) a conexão direta com a Meta (Instagram/Facebook).
     'meta_social'
   ));
 
@@ -89797,7 +89797,7 @@ comment on table public.crm_metas is
 
 notify pgrst, 'reload schema';
 
--- ---- canal direto com a Meta, Instagram/Facebook (migration 9454) ----
+-- ---- canal direto com a Meta, Instagram/Facebook (migration 9513) ----
 -- O vocabulário (`channel_sessions.provider`, `channel_sessions_provider_ref_check`
 -- e `webhook_events_log_provider_check`) e as colunas foram somados nos blocos
 -- ÚNICOS de cada constraint, lá em cima; este bloco acrescenta o índice, os

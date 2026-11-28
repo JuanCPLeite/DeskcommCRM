@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Branch `feat/meta-social-nativo`, criada de `origin/main`. Migrations **NNNN ≥ 9454** (9452 e 9453 estão em `feat/tech-provider-embedded-signup`); conferir com `pnpm checar:colisao-de-migration` antes de commitar.
+- Branch `feat/meta-social-nativo`, criada de `origin/main`. Migrations **NNNN 9513 (o próximo livre medido por `pnpm checar:colisao-de-migration`, que conta os PRs abertos do projeto)** (9452 e 9453 estão em `feat/tech-provider-embedded-signup`); conferir com `pnpm checar:colisao-de-migration` antes de commitar.
 - Migration: `-- manifest:` na 1ª linha, idempotente, sem `BEGIN/COMMIT`, **apêndice no `supabase/baseline.sql`** (um bloco por constraint), `revoke ... from public, anon` em função nova, `notify pgrst, 'reload schema'` no fim.
 - Tabela tenant-aware: `organization_id uuid not null references organizations(id) on delete cascade` + RLS `fn_user_org_ids()` + teste de isolamento. Credencial: tabela "só servidor" (RLS ligada, sem policy, grant só a `service_role`).
 - Nenhuma feature nomeia provider: só `lib/channels/**` conhece `meta_social` (`pnpm lint:channels`). Capability nova só se alguém a consome.
@@ -54,10 +54,10 @@
 - [ ] **Step 3:** `pnpm typecheck` e os dois testes — esperado: PASS. `pnpm lint:channels` — PASS.
 - [ ] **Step 4:** Commit `feat(canais): provider meta_social na matriz de canais`.
 
-### Task 2: Migration 9454 — sessão do canal, credenciais do app e baseline
+### Task 2: Migration 9513 — sessão do canal, credenciais do app e baseline
 
 **Files:**
-- Create: `supabase/migrations/<timestamp>_9454_meta_social_canal.sql`
+- Create: `supabase/migrations/<timestamp>_9513_meta_social_canal.sql`
 - Modify: `supabase/baseline.sql` (apêndice no fim), `lib/database.types.ts` (regenerar)
 - Test: `tests/invariants/meta-social-isolamento.test.ts`
 
