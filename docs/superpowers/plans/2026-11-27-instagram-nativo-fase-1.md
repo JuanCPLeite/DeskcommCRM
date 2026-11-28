@@ -25,7 +25,7 @@
 
 ## Passos manuais do dono (fora do código)
 
-1. No painel do app Meta (DMFLOW): **URIs de redirecionamento do OAuth válidos** (Login do Facebook) e **URL de redirecionamento** (Instagram API, login unificado) ganham `https://<domínio do CRM>/api/v1/channels/meta-social/callback`.
+1. No painel do app Meta (DMFLOW): **URIs de redirecionamento do OAuth válidos** (Login do Facebook) e **URL de redirecionamento** (Instagram API, login unificado) ganham `https://<domínio do CRM>/auth/meta-social-return`.
 2. **Webhooks → Instagram**: URL `https://<domínio do CRM>/api/v1/webhooks/meta-social`, token = o "token de verificação" salvo na tela de credenciais do CRM; campos `messages`, `messaging_postbacks`, `comments`, `live_comments`.
 3. Conta Instagram de teste como **Testador do Instagram** (já feito para o DMFlow).
 
@@ -90,7 +90,7 @@
 ### Task 4: Conexão por login unificado (OAuth)
 
 **Files:**
-- Create: `lib/channels/meta-social/oauth.ts`, `lib/channels/meta-social/oauth.test.ts`, `lib/channels/meta-social/graph.ts`, `app/api/v1/channels/meta-social/connect/route.ts`, `app/api/v1/channels/meta-social/callback/route.ts` (+ testes de rota)
+- Create: `lib/channels/meta-social/oauth.ts`, `lib/channels/meta-social/oauth.test.ts`, `lib/channels/meta-social/graph.ts`, `app/api/v1/channels/meta-social/connect/route.ts`, `app/auth/meta-social-return/route.ts` (+ testes de rota)
 
 **Interfaces:**
 - Produces:

@@ -59,7 +59,7 @@ export default async function Page() {
       temNoAmbiente={Boolean(doAmbiente.appSecret && doAmbiente.verifyToken)}
       leituraFalhou={Boolean(error)}
       urlDoWebhook={`${base}/api/v1/webhooks/meta-social`}
-      urlDeRedirecionamento={`${base}/api/v1/channels/meta-social/callback`}
+      urlDeRedirecionamento={`${base}/auth/meta-social-return`}
     />
   );
 }
