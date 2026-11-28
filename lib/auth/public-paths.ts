@@ -290,7 +290,7 @@ export const PUBLIC_PATHS: RegExp[] = [
   // exigir sessão para LER o que se está aceitando inverte a ordem. Âncorado nos
   // dois nomes de propósito: `/^\/legal/` deixaria qualquer sub-path futuro
   // nascer público de carona.
-  /^\/legal\/(terms|privacy)$/,
+  /^\/legal\/(terms|privacy|data-deletion)$/,
 ];
 
 export function isPublicPath(pathname: string): boolean {

@@ -246,6 +246,41 @@ export default async function PrivacyPage() {
           .
         </p>
       </section>
+      <section className="space-y-2">
+        <h2 className="text-base font-semibold">{t("Instagram e Facebook (Meta)")}</h2>
+        <p>
+          {t(
+            "Quando uma pessoa autorizada da organização conecta uma conta profissional do Instagram a este sistema, a Meta devolve ao servidor do operador um código de acesso a essa conta. Os dados recebidos são usados somente para a função que ela pediu:",
+          )}
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            {t(
+              "ler o perfil da conta (nome, @usuário e foto) para identificar a conexão;",
+            )}
+          </li>
+          <li>
+            {t(
+              "receber as mensagens diretas e os comentários enviados à conta, e mostrá-los na Caixa de Entrada para a equipe atender;",
+            )}
+          </li>
+          <li>{t("enviar as respostas que a equipe ou as automações da organização escolheram enviar.")}</li>
+        </ul>
+        <p>
+          {t(
+            "O código de acesso é guardado cifrado no servidor do operador. Os dados da Meta não são vendidos, não são usados para publicidade e não são usados para treinar modelos de inteligência artificial. Cada mensagem recebida fica registrada no atendimento da organização, como qualquer outra conversa.",
+          )}
+        </p>
+        <p>
+          {t(
+            "A conexão pode ser desfeita a qualquer momento em Conexões → Instagram → Desconectar, e o acesso também pode ser retirado nas configurações do Instagram, em Apps e sites. Para pedir a exclusão dos dados, veja",
+          )}{" "}
+          <a className="underline underline-offset-2" href="/legal/data-deletion">
+            {t("como excluir seus dados")}
+          </a>
+          .
+        </p>
+      </section>
     </>
   );
 }
