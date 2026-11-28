@@ -47,10 +47,10 @@ describe("provider meta_social na matriz de canais", () => {
     expect(channelBrand({ provider: "meta_social", social_platform: null })).toBe("unknown");
   });
 
-  it("sem transporte ainda: o adaptador existe, não finge envio e recusa de forma permanente", async () => {
+  it("tem adaptador de envio: sem a thread do cliente recusa de forma permanente (não re-tenta o turno)", async () => {
     const adapter = getAdapter("meta_social");
     expect(adapter.provider).toBe("meta_social");
-    expect(adapter.isConfigured()).toBe(false);
+    expect(adapter.isConfigured()).toBe(true);
     expect(adapter.resolveRecipient({ isGroup: false } as never)).toBe("provider-thread");
     expect(adapter.reportConversion).toBeUndefined();
     const envio = adapter.send({
@@ -58,7 +58,7 @@ describe("provider meta_social na matriz de canais", () => {
       sessionRef: "17841400000000000",
       to: "provider-thread",
       kind: "text",
-      text: "oi",
+      body: "oi",
     } as never);
     await expect(envio).rejects.toBeInstanceOf(FalhaDeEnvioDoCanal);
     await expect(envio).rejects.toMatchObject({ natureza: "permanente" });
