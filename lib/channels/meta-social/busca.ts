@@ -22,10 +22,21 @@ import { graphBaseUrl } from "../meta/graph-base";
 import { ingestMetaSocial } from "./ingest";
 
 const PROVIDER = "meta_social";
-const TIMEOUT_MS = 15_000;
-/** Conversas e mensagens lidas por conta e por rodada. Cada rodada é de 1 minuto: sobra folga. */
-const CONVERSAS_POR_RODADA = 25;
+/** A Graph de conversas é LENTA (medido: ~5 s a lista leve, ~13 s com mensagens juntas): o prazo de cada chamada é folgado. */
+const TIMEOUT_MS = 25_000;
+/** Conversas olhadas por rodada e mensagens lidas por conversa. */
+const CONVERSAS_NA_LISTA = 20;
 const MENSAGENS_POR_CONVERSA = 10;
+/** Conversas com mensagens lidas por rodada: o cron tem prazo (45 s) e cada leitura é uma ida à Meta. */
+const CONVERSAS_LIDAS_POR_RODADA = 4;
+/** Depois deste tempo a rodada para de abrir conversas novas (a marca fica onde parou; a próxima continua). */
+const ORCAMENTO_DA_RODADA_MS = 28_000;
+/**
+ * Folga da marca na leitura das mensagens de uma conversa: se uma rodada parou no meio (prazo ou
+ * teto de conversas), as não lidas ficam com mensagens um pouco ANTES da marca nova. Reler essa
+ * folga é inofensivo — a ingestão é idempotente por `external_id`.
+ */
+const FOLGA_DA_MARCA_MS = 10 * 60 * 1000;
 /** Sessão sem marca d'água começa a olhar daqui para trás: não importa o histórico antigo da conta. */
 const JANELA_INICIAL_MS = 10 * 60 * 1000;
 
@@ -44,6 +55,7 @@ interface MensagemDaGraph {
 }
 
 interface ConversaDaGraph {
+  id?: string;
   updated_time?: string;
   messages?: { data?: MensagemDaGraph[] };
 }
@@ -58,59 +70,81 @@ function anexosDe(m: MensagemDaGraph): { tipo: string; url: string }[] {
   return saida;
 }
 
-async function lerConversas(token: string, igId: string): Promise<ConversaDaGraph[]> {
-  const q = new URLSearchParams({
-    platform: "instagram",
-    limit: String(CONVERSAS_POR_RODADA),
-    fields: `updated_time,messages.limit(${MENSAGENS_POR_CONVERSA}){id,message,created_time,from,attachments}`,
-  });
-  const resposta = await fetch(`${graphBaseUrl()}/${encodeURIComponent(igId)}/conversations?${q.toString()}`, {
+async function chamar<T>(token: string, caminho: string, q: URLSearchParams): Promise<T> {
+  const resposta = await fetch(`${graphBaseUrl()}/${caminho}?${q.toString()}`, {
     headers: { Authorization: `Bearer ${token}` },
     cache: "no-store",
     redirect: "error",
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   if (!resposta.ok) throw new Error(`conversas_http_${resposta.status}`);
-  const corpo = (await resposta.json().catch(() => ({}))) as { data?: ConversaDaGraph[] };
-  return corpo.data ?? [];
+  return (await resposta.json().catch(() => ({}))) as T;
+}
+
+/** A lista LEVE: só id e quando cada conversa mexeu pela última vez. */
+async function conversasQueMexeram(token: string, igId: string, desde: Date): Promise<{ id: string; mexeuEm: Date }[]> {
+  const q = new URLSearchParams({ platform: "instagram", limit: String(CONVERSAS_NA_LISTA), fields: "id,updated_time" });
+  const corpo = await chamar<{ data?: ConversaDaGraph[] }>(token, `${encodeURIComponent(igId)}/conversations`, q);
+  const lista: { id: string; mexeuEm: Date }[] = [];
+  for (const c of corpo.data ?? []) {
+    const mexeuEm = c.updated_time ? new Date(c.updated_time) : null;
+    if (!c.id || !mexeuEm || Number.isNaN(mexeuEm.getTime()) || mexeuEm <= desde) continue;
+    lista.push({ id: c.id, mexeuEm });
+  }
+  // Das mais antigas para as mais novas: se a rodada parar no meio, o que ficou é o mais novo.
+  return lista.sort((a, b) => a.mexeuEm.getTime() - b.mexeuEm.getTime());
+}
+
+async function mensagensDaConversa(token: string, conversaId: string): Promise<MensagemDaGraph[]> {
+  const q = new URLSearchParams({
+    fields: `messages.limit(${MENSAGENS_POR_CONVERSA}){id,message,created_time,from,attachments}`,
+  });
+  const corpo = await chamar<ConversaDaGraph>(token, encodeURIComponent(conversaId), q);
+  return corpo.messages?.data ?? [];
 }
 
 /** Uma conta: busca, entrega as DMs novas e devolve a nova marca d'água. Lança se a Meta falhar. */
 export async function buscarDmsDaConta(
   db: SupabaseClient,
   sessao: { id: string; organizationId: string; igId: string; token: string; desde: Date },
+  inicio = Date.now(),
 ): Promise<{ entregues: number; ate: Date }> {
-  const conversas = await lerConversas(sessao.token, sessao.igId);
-  const novas: { m: MensagemDaGraph; quando: Date }[] = [];
-  for (const c of conversas) {
-    for (const m of c.messages?.data ?? []) {
-      if (!m.id || !m.from?.id || m.from.id === sessao.igId || !m.created_time) continue;
-      const quando = new Date(m.created_time);
-      if (Number.isNaN(quando.getTime()) || quando <= sessao.desde) continue;
-      novas.push({ m, quando });
-    }
-  }
-  // Do mais antigo para o mais novo: a marca só avança sobre o que de fato entrou.
-  novas.sort((a, b) => a.quando.getTime() - b.quando.getTime());
-
+  const mexeram = await conversasQueMexeram(sessao.token, sessao.igId, sessao.desde);
   let ate = sessao.desde;
   let entregues = 0;
-  for (const { m, quando } of novas) {
-    const r = await ingestMetaSocial(
-      db,
-      {
-        tipo: "mensagem",
-        contaId: sessao.igId,
-        participanteId: m.from!.id!,
-        mid: m.id!,
-        texto: m.message ?? null,
-        anexos: anexosDe(m),
-        enviadoEm: quando,
-      },
-      { id: sessao.id, organizationId: sessao.organizationId },
-    );
-    if (r.status !== "ignored") entregues += 1;
-    ate = quando;
+  let lidas = 0;
+
+  for (const conversa of mexeram) {
+    if (lidas >= CONVERSAS_LIDAS_POR_RODADA || Date.now() - inicio > ORCAMENTO_DA_RODADA_MS) break;
+    lidas += 1;
+    const novas: { m: MensagemDaGraph; quando: Date }[] = [];
+    for (const m of await mensagensDaConversa(sessao.token, conversa.id)) {
+      if (!m.id || !m.from?.id || m.from.id === sessao.igId || !m.created_time) continue;
+      const quando = new Date(m.created_time);
+      if (Number.isNaN(quando.getTime()) || quando.getTime() <= sessao.desde.getTime() - FOLGA_DA_MARCA_MS) continue;
+      novas.push({ m, quando });
+    }
+    // Do mais antigo para o mais novo: a marca só avança sobre o que de fato entrou.
+    novas.sort((a, b) => a.quando.getTime() - b.quando.getTime());
+    for (const { m, quando } of novas) {
+      const r = await ingestMetaSocial(
+        db,
+        {
+          tipo: "mensagem",
+          contaId: sessao.igId,
+          participanteId: m.from!.id!,
+          mid: m.id!,
+          texto: m.message ?? null,
+          anexos: anexosDe(m),
+          enviadoEm: quando,
+        },
+        { id: sessao.id, organizationId: sessao.organizationId },
+      );
+      if (r.status !== "ignored") entregues += 1;
+      if (quando > ate) ate = quando;
+    }
+    // A conversa foi lida inteira: a marca pode ir até quando ela mexeu pela última vez.
+    if (conversa.mexeuEm > ate) ate = conversa.mexeuEm;
   }
   return { entregues, ate };
 }
