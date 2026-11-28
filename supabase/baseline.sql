@@ -83394,6 +83394,69 @@ update public.crm_leads l
 -- ---- anonimizar alcança as fichas fundidas: a cascata (migration 9243) ----
 -- Espelho de supabase/migrations/20261107120001_9243_anonimizar_alcanca_fichas_fundidas.sql.
 -- O bloco de dados está no fim do arquivo: precisa de todos os gatilhos de anonimização criados.
+-- ─── A ligação do canal direto com a Meta é do servidor ────────────────────
+-- Estende o gatilho de 9093/9104: `social_account_id` decide a que organização o
+-- webhook da Meta entrega as DMs daquela conta, e `social_token_encrypted` é
+-- o acesso a ela. A tabela tem GRANT ALL para `authenticated` e as policies deixam
+-- o admin alterar a própria linha direto pela API do banco: sem esta trava, um
+-- admin "reservaria" a conta Instagram de outra empresa (o índice único passaria a
+-- barrar a conexão legítima dela) e plantaria um token. É o corpo da 9104 inteiro,
+-- mais as colunas do canal direto — a última definição da função é a que vale.
+create or replace function public.fn_channel_sessions_ligacao_ao_provedor_e_do_servidor()
+returns trigger language plpgsql set search_path = public, pg_temp as $$
+begin
+  if current_user not in ('authenticated', 'anon') then
+    -- `new` é nulo no DELETE: devolvê-lo cancelaria a exclusão do servidor.
+    return coalesce(new, old);
+  end if;
+  if tg_op = 'DELETE' then
+    if old.zernio_credencial_da_instalacao then
+      raise exception 'canal_ligacao_ao_provedor_e_do_servidor' using errcode = '42501';
+    end if;
+    return old;
+  end if;
+  if tg_op = 'INSERT' then
+    if new.zernio_credencial_da_instalacao
+       or new.zernio_account_id is not null
+       or new.zernio_profile_id is not null
+       or new.zernio_webhook_id is not null
+       -- 9104: a credencial do número oficial também é do servidor.
+       or new.meta_token_encrypted is not null
+       or new.meta_phone_number_id is not null
+       or new.meta_waba_id is not null
+       -- 9513: a ligação do canal direto com a Meta também.
+       or new.social_account_id is not null
+       or new.social_token_encrypted is not null then
+      raise exception 'canal_ligacao_ao_provedor_e_do_servidor' using errcode = '42501';
+    end if;
+    return new;
+  end if;
+  if (new.zernio_credencial_da_instalacao, new.zernio_account_id, new.zernio_profile_id, new.zernio_webhook_id)
+       is distinct from
+     (old.zernio_credencial_da_instalacao, old.zernio_account_id, old.zernio_profile_id, old.zernio_webhook_id)
+     -- 9104: a credencial do número oficial também é do servidor.
+     or (new.meta_token_encrypted, new.meta_phone_number_id, new.meta_waba_id)
+       is distinct from
+     (old.meta_token_encrypted, old.meta_phone_number_id, old.meta_waba_id)
+     -- 9513: a ligação do canal direto com a Meta também.
+     or (new.social_account_id, new.social_token_encrypted, new.social_token_expires_at)
+       is distinct from
+     (old.social_account_id, old.social_token_encrypted, old.social_token_expires_at)
+     -- 9513: desarquivar o canal direto também é do servidor — senão o admin 'reserva' a
+     -- conta já desconectada (o webhook voltaria a entregar nela) e bloqueia a reconexão legítima.
+     or (old.provider = 'meta_social' and old.archived_at is not null and new.archived_at is null)
+     or (old.zernio_credencial_da_instalacao and
+         (new.archived_at, new.provider, new.organization_id, new.phone_number)
+           is distinct from
+         (old.archived_at, old.provider, old.organization_id, old.phone_number)) then
+    raise exception 'canal_ligacao_ao_provedor_e_do_servidor' using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+
+revoke execute on function public.fn_channel_sessions_ligacao_ao_provedor_e_do_servidor() from public, anon, authenticated;
+
 -- Põe um arquivo na fila de remoção. Quem chama já provou pela forma do caminho que
 -- ele é desta organização, então a linha que exista com o mesmo caminho passa a ser
 -- dela, pendente: sem isso o ponteiro sairia e o arquivo ficaria.
@@ -84226,70 +84289,6 @@ create trigger trg_contacts_fusao_e_anonimizacao_so_pelo_servidor_ao_criar
 revoke all on table public.storage_redaction_queue from authenticated;
 grant select on table public.storage_redaction_queue to authenticated;
 
-
-
--- ─── A ligação do canal direto com a Meta é do servidor ────────────────────
--- Estende o gatilho de 9093/9104: `social_account_id` decide a que organização o
--- webhook da Meta entrega as DMs daquela conta, e `social_token_encrypted` é
--- o acesso a ela. A tabela tem GRANT ALL para `authenticated` e as policies deixam
--- o admin alterar a própria linha direto pela API do banco: sem esta trava, um
--- admin "reservaria" a conta Instagram de outra empresa (o índice único passaria a
--- barrar a conexão legítima dela) e plantaria um token. É o corpo da 9104 inteiro,
--- mais as colunas do canal direto — a última definição da função é a que vale.
-create or replace function public.fn_channel_sessions_ligacao_ao_provedor_e_do_servidor()
-returns trigger language plpgsql set search_path = public, pg_temp as $$
-begin
-  if current_user not in ('authenticated', 'anon') then
-    -- `new` é nulo no DELETE: devolvê-lo cancelaria a exclusão do servidor.
-    return coalesce(new, old);
-  end if;
-  if tg_op = 'DELETE' then
-    if old.zernio_credencial_da_instalacao then
-      raise exception 'canal_ligacao_ao_provedor_e_do_servidor' using errcode = '42501';
-    end if;
-    return old;
-  end if;
-  if tg_op = 'INSERT' then
-    if new.zernio_credencial_da_instalacao
-       or new.zernio_account_id is not null
-       or new.zernio_profile_id is not null
-       or new.zernio_webhook_id is not null
-       -- 9104: a credencial do número oficial também é do servidor.
-       or new.meta_token_encrypted is not null
-       or new.meta_phone_number_id is not null
-       or new.meta_waba_id is not null
-       -- 9513: a ligação do canal direto com a Meta também.
-       or new.social_account_id is not null
-       or new.social_token_encrypted is not null then
-      raise exception 'canal_ligacao_ao_provedor_e_do_servidor' using errcode = '42501';
-    end if;
-    return new;
-  end if;
-  if (new.zernio_credencial_da_instalacao, new.zernio_account_id, new.zernio_profile_id, new.zernio_webhook_id)
-       is distinct from
-     (old.zernio_credencial_da_instalacao, old.zernio_account_id, old.zernio_profile_id, old.zernio_webhook_id)
-     -- 9104: a credencial do número oficial também é do servidor.
-     or (new.meta_token_encrypted, new.meta_phone_number_id, new.meta_waba_id)
-       is distinct from
-     (old.meta_token_encrypted, old.meta_phone_number_id, old.meta_waba_id)
-     -- 9513: a ligação do canal direto com a Meta também.
-     or (new.social_account_id, new.social_token_encrypted, new.social_token_expires_at)
-       is distinct from
-     (old.social_account_id, old.social_token_encrypted, old.social_token_expires_at)
-     -- 9513: desarquivar o canal direto também é do servidor — senão o admin 'reserva' a
-     -- conta já desconectada (o webhook voltaria a entregar nela) e bloqueia a reconexão legítima.
-     or (old.provider = 'meta_social' and old.archived_at is not null and new.archived_at is null)
-     or (old.zernio_credencial_da_instalacao and
-         (new.archived_at, new.provider, new.organization_id, new.phone_number)
-           is distinct from
-         (old.archived_at, old.provider, old.organization_id, old.phone_number)) then
-    raise exception 'canal_ligacao_ao_provedor_e_do_servidor' using errcode = '42501';
-  end if;
-  return new;
-end;
-$$;
-
-revoke execute on function public.fn_channel_sessions_ligacao_ao_provedor_e_do_servidor() from public, anon, authenticated;
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
