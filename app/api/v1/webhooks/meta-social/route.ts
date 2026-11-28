@@ -23,7 +23,7 @@ import { abrirArquivoDoWebhook, fecharArquivoDoWebhook } from "@/lib/channels/ar
 import { verificationChallenge, verifyMetaSignature } from "@/lib/channels/meta/webhook";
 import { appSocialDaMeta } from "@/lib/channels/meta-social/app";
 import { ingestMetaSocial, sessaoDaConta } from "@/lib/channels/meta-social/ingest";
-import { parseMetaSocialWebhook } from "@/lib/channels/meta-social/webhook";
+import { desenhoDaEntrega, parseMetaSocialWebhook } from "@/lib/channels/meta-social/webhook";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -63,6 +63,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   logger.info("[meta-social.webhook] entrega recebida", {
     eventos: eventos.length,
     contas: [...new Set(eventos.map((e) => e.contaId))],
+    // O desenho (contas, famílias e nomes de campo), nunca o conteúdo: é o rastro de uma entrega que
+    // o leitor não entendeu ou que veio de uma conta que ninguém conectou.
+    desenho: desenhoDaEntrega(json),
   });
   const admin = createAdminClient();
 

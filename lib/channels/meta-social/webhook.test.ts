@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseMetaSocialWebhook } from "@/lib/channels/meta-social/webhook";
+import { desenhoDaEntrega, parseMetaSocialWebhook } from "@/lib/channels/meta-social/webhook";
 
 const CONTA = "17841400000000001";
 const PESSOA = "9988776655";
@@ -117,5 +117,35 @@ describe("parseMetaSocialWebhook", () => {
 
   it("entrega de outro objeto da Meta (page, whatsapp) não é desta conexão", () => {
     expect(parseMetaSocialWebhook({ ...mensagem(), object: "whatsapp_business_account" })).toEqual([]);
+  });
+});
+
+describe("DM entregue como mudança (`changes` com field messages) e o desenho da entrega", () => {
+  const corpo = (value: unknown) => ({ object: "instagram", entry: [{ id: "17841400000000001", time: 1795000000, changes: [{ field: "messages", value }] }] });
+
+  it("lê a DM do formato `changes` como mensagem recebida, igual ao `messaging[]`", () => {
+    const eventos = parseMetaSocialWebhook(
+      corpo({ sender: { id: "999" }, recipient: { id: "17841400000000001" }, timestamp: "1795000000", message: { mid: "mid-1", text: "oi" } }),
+    );
+    expect(eventos).toHaveLength(1);
+    expect(eventos[0]).toMatchObject({ tipo: "mensagem", contaId: "17841400000000001", participanteId: "999", mid: "mid-1", texto: "oi" });
+  });
+
+  it("o eco no formato `changes` entra como saída, com o destinatário como participante", () => {
+    const [e] = parseMetaSocialWebhook(
+      corpo({ sender: { id: "17841400000000001" }, recipient: { id: "999" }, timestamp: "1795000000", message: { mid: "mid-2", text: "ola", is_echo: true } }),
+    );
+    expect(e).toMatchObject({ tipo: "eco", participanteId: "999", mid: "mid-2" });
+  });
+
+  it("`messages` sem o desenho de uma mensagem continua sendo só um campo sem tratamento", () => {
+    const [e] = parseMetaSocialWebhook(corpo({ algo: "diferente" }));
+    expect(e).toMatchObject({ tipo: "outro" });
+  });
+
+  it("o desenho não leva conteúdo: só contas, quantidade de messaging e nomes de campo", () => {
+    const d = desenhoDaEntrega(corpo({ sender: { id: "999" }, message: { mid: "m", text: "segredo da conversa" } }));
+    expect(d).toEqual({ objeto: "instagram", entradas: [{ conta: "17841400000000001", messaging: 0, campos: ["messages"] }] });
+    expect(JSON.stringify(d)).not.toContain("segredo");
   });
 });

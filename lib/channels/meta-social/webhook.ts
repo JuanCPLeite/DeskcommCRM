@@ -139,6 +139,12 @@ function doItemDeMudanca(contaId: string, entradaTime: unknown, item: unknown): 
       midiaId: id(obj(valor?.media)?.id),
     };
   }
+  // A DM entregue como MUDANÇA (`field: "messages"`): o `value` tem o mesmo desenho de um item de
+  // `messaging[]` (sender, recipient, timestamp, message). A Meta usa as duas formas conforme o app.
+  if (campo === "messages" && valor) {
+    const ev = doItemDeMensagem(contaId, entradaTime, valor);
+    if (ev) return ev;
+  }
   // Campo que a Meta mandou e o canal não trata: registra que veio, sem efeito.
   return campo ? { tipo: "outro", contaId, participanteId: "", mid: "", texto: null, anexos: [], enviadoEm: instante(entradaTime) } : null;
 }
@@ -162,4 +168,25 @@ export function parseMetaSocialWebhook(raw: unknown): MetaSocialEvento[] {
     }
   }
   return eventos;
+}
+
+/**
+ * O DESENHO de uma entrega, sem nenhum conteúdo: quais contas, quais famílias (`messaging` ou
+ * `changes`) e quais campos. É o que o log mostra, para a próxima entrega que o leitor não entender
+ * (ou que vier de uma conta que ninguém conectou) ter um rastro.
+ */
+export function desenhoDaEntrega(raw: unknown): { objeto: string | null; entradas: { conta: string | null; messaging: number; campos: string[] }[] } {
+  const corpo = obj(raw);
+  const entradas = Array.isArray(corpo?.entry) ? (corpo.entry as unknown[]) : [];
+  return {
+    objeto: typeof corpo?.object === "string" ? corpo.object : null,
+    entradas: entradas.map((e) => {
+      const entrada = obj(e);
+      return {
+        conta: id(entrada?.id),
+        messaging: Array.isArray(entrada?.messaging) ? entrada.messaging.length : 0,
+        campos: (Array.isArray(entrada?.changes) ? (entrada.changes as unknown[]) : []).map((c) => texto(obj(c)?.field) ?? "?").slice(0, 10),
+      };
+    }),
+  };
 }
