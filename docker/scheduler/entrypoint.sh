@@ -84,7 +84,7 @@ CRONS="
 */5 * * * *|60|api/v1/cron/mcp-oauth-revogacao
 */5 * * * *|45|api/v1/cron/channel-health
 # A BUSCA de DMs do Instagram pela API (canal direto com a Meta). Minuto a minuto: é a
-# rede de segurança do webhook de `messages`, que a Meta nem sempre entrega. Sem conta
+# rede de segurança do webhook de DMs, que a Meta nem sempre entrega. Sem conta
 # conectada responde em milissegundos (uma consulta indexada).
 * * * * *|45|api/v1/cron/meta-social-dms
 # A JANELA DE MANUTENÇÃO (#2388). Minuto a minuto porque o que ela decide é a
