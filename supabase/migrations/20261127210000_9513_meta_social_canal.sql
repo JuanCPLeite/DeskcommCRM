@@ -152,6 +152,9 @@ begin
      or (new.social_account_id, new.meta_social_token_encrypted, new.meta_social_token_expires_at)
        is distinct from
      (old.social_account_id, old.meta_social_token_encrypted, old.meta_social_token_expires_at)
+     -- 9513: desarquivar o canal direto também é do servidor — senão o admin 'reserva' a
+     -- conta já desconectada (o webhook voltaria a entregar nela) e bloqueia a reconexão legítima.
+     or (old.provider = 'meta_social' and old.archived_at is not null and new.archived_at is null)
      or (old.zernio_credencial_da_instalacao and
          (new.archived_at, new.provider, new.organization_id, new.phone_number)
            is distinct from

@@ -93,6 +93,12 @@ describe("9513: o admin da organização não grava a ligação do canal direto 
     expect(erro).toContain(RECUSA);
   });
 
+  it("DESARQUIVAR a própria linha desconectada: 42501 (senão o admin 'reserva' a conta e recebe o webhook dela)", () => {
+    const erro = erroDe(() => comoAdmin(`update public.channel_sessions set archived_at = null where id = '${CANAL}'`));
+    expect(erro, "o admin desarquivou o canal direto SEM erro").not.toBeNull();
+    expect(erro).toContain(RECUSA);
+  });
+
   it("CONTROLE: o MESMO admin renomeia a MESMA linha", () => {
     expect(comoAdmin(`update public.channel_sessions set display_name = 'Renomeado 9513' where id = '${CANAL}'`)).toContain("LINHAS:1");
   });
@@ -121,6 +127,10 @@ describe("9513: o servidor (service role) grava a ligação do canal direto", ()
                meta_social_token_expires_at = now()
          where id = '${CANAL}'`),
     ).toContain("LINHAS:1");
+  });
+
+  it("desarquivar pelo servidor é permitido (a reconexão legítima)", () => {
+    expect(comoServidor(`update public.channel_sessions set archived_at = null where id = '${CANAL}'`)).toContain("LINHAS:1");
   });
 
   it("UPDATE que zera o token (o que a desconexão faz)", () => {

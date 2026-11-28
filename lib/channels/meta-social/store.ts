@@ -70,6 +70,8 @@ export async function criarSessao(db: SupabaseClient, nova: NovaSessao): Promise
     .select("id")
     .single();
   if (lerLimiteEstourado(error)) throw error;
+  // O índice único da conta ativa segurou: outra organização a conectou entre a consulta e a gravação.
+  if (error?.code === "23505") throw new Error("conta_ja_conectada");
   if (error || !data) throw new Error(`Não foi possível criar o canal: ${error?.code ?? "sem retorno"}`);
   return { id: data.id as string };
 }

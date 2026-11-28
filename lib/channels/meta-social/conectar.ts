@@ -14,6 +14,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { lerLimiteEstourado } from "@/lib/cobranca/limites";
 import { encryptWebhookSecret } from "@/lib/webhooks/secrets";
 
 import { appSocialDaMeta } from "./app";
@@ -89,7 +90,7 @@ export interface ContaConectada {
 
 export interface ResultadoDaConexao {
   conectadas: ContaConectada[];
-  recusadas: { igId: string; motivo: "ja_conectada_em_outra_organizacao" }[];
+  recusadas: { igId: string; motivo: "ja_conectada_em_outra_organizacao" | "falhou" }[];
 }
 
 export async function concluirConexaoMeta(
@@ -140,35 +141,47 @@ export async function concluirConexaoMeta(
 
   const resultado: ResultadoDaConexao = { conectadas: [], recusadas: [] };
   for (const conta of contas) {
-    const existente = await sessaoAtivaDaConta(db, conta.id);
-    if (existente && existente.organizationId !== ctx.organizationId) {
-      resultado.recusadas.push({ igId: conta.id, motivo: "ja_conectada_em_outra_organizacao" });
-      continue;
-    }
-    const perfil = await perfilDaConta(token, conta.id);
-    const webhookAssinado = await assinarWebhooks(token, conta.id);
-    let channelId: string;
-    if (existente) {
-      await atualizarSessao(db, {
-        organizationId: ctx.organizationId,
-        sessionId: existente.id,
-        tokenCifrado,
-        tokenExpiraEm,
-        webhookAssinado,
+    // Cada conta é isolada: a falha de uma NÃO pode deixar as já gravadas sem resposta
+    // (e sem auditoria), e a pessoa tentaria de novo com um código que já foi usado.
+    try {
+      const existente = await sessaoAtivaDaConta(db, conta.id);
+      if (existente && existente.organizationId !== ctx.organizationId) {
+        resultado.recusadas.push({ igId: conta.id, motivo: "ja_conectada_em_outra_organizacao" });
+        continue;
+      }
+      const perfil = await perfilDaConta(token, conta.id);
+      const webhookAssinado = await assinarWebhooks(token, conta.id);
+      let channelId: string;
+      if (existente) {
+        await atualizarSessao(db, {
+          organizationId: ctx.organizationId,
+          sessionId: existente.id,
+          tokenCifrado,
+          tokenExpiraEm,
+          webhookAssinado,
+        });
+        channelId = existente.id;
+      } else {
+        ({ id: channelId } = await criarSessao(db, {
+          organizationId: ctx.organizationId,
+          userId: ctx.userId,
+          socialAccountId: conta.id,
+          username: perfil.username || conta.username || "",
+          tokenCifrado,
+          tokenExpiraEm,
+          webhookAssinado,
+        }));
+      }
+      resultado.conectadas.push({ channelId, igId: conta.id, username: perfil.username, webhookAssinado });
+    } catch (err) {
+      // O limite de canais do plano sobe cru: a rota diz o número ao operador.
+      if (lerLimiteEstourado(err)) throw err;
+      // Outra organização gravou a mesma conta no meio do caminho (o índice único segurou).
+      resultado.recusadas.push({
+        igId: conta.id,
+        motivo: err instanceof Error && err.message === "conta_ja_conectada" ? "ja_conectada_em_outra_organizacao" : "falhou",
       });
-      channelId = existente.id;
-    } else {
-      ({ id: channelId } = await criarSessao(db, {
-        organizationId: ctx.organizationId,
-        userId: ctx.userId,
-        socialAccountId: conta.id,
-        username: perfil.username || conta.username || "",
-        tokenCifrado,
-        tokenExpiraEm,
-        webhookAssinado,
-      }));
     }
-    resultado.conectadas.push({ channelId, igId: conta.id, username: perfil.username, webhookAssinado });
   }
   return resultado;
 }

@@ -126,6 +126,21 @@ describe("concluirConexaoMeta", () => {
     expect(r.conectadas[0]?.webhookAssinado).toBe(false);
   });
 
+  it("falha numa conta NÃO derruba as outras: as já gravadas ficam na resposta (e serão auditadas) e a que falhou vai para recusadas", async () => {
+    contasAtribuidas.mockResolvedValueOnce([{ id: "1", username: "a" }, { id: "2", username: "b" }, { id: "3", username: "c" }]);
+    criarSessao.mockResolvedValueOnce({ id: "s1" }).mockRejectedValueOnce(new Error("banco_caiu")).mockResolvedValueOnce({ id: "s3" });
+    const r = await concluirConexaoMeta(db, ctx, { estado: estadoValido(), code: "COD" });
+    expect(r.conectadas.map((c) => c.igId)).toEqual(["1", "3"]);
+    expect(r.recusadas).toEqual([{ igId: "2", motivo: "falhou" }]);
+  });
+
+  it("corrida: a outra organização gravou a mesma conta no meio do caminho (conta_ja_conectada) vira recusa, não erro", async () => {
+    criarSessao.mockRejectedValueOnce(new Error("conta_ja_conectada"));
+    const r = await concluirConexaoMeta(db, ctx, { estado: estadoValido(), code: "COD" });
+    expect(r.conectadas).toHaveLength(0);
+    expect(r.recusadas).toEqual([{ igId: "1784", motivo: "ja_conectada_em_outra_organizacao" }]);
+  });
+
   it("login com várias contas conecta cada uma", async () => {
     contasAtribuidas.mockResolvedValueOnce([{ id: "1", username: "a" }, { id: "2", username: "b" }]);
     const r = await concluirConexaoMeta(db, ctx, { estado: estadoValido(), code: "COD" });
