@@ -15,6 +15,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { logger } from "@/lib/logger";
 import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
 
 import { graphBaseUrl } from "../meta/graph-base";
@@ -154,8 +155,14 @@ export async function buscarDmsNovas(db: SupabaseClient, agora = new Date()): Pr
           .eq("id", s.id as string);
         if (eMarca) throw new Error(`marca_nao_gravada:${eMarca.code ?? "sem_codigo"}`);
       }
-    } catch {
+    } catch (err) {
       out.falhas += 1;
+      // O motivo é NOSSO (código de erro ou status HTTP), nunca o token nem o corpo da Meta.
+      logger.warn("[meta-social.busca] conta falhou", {
+        organization_id: organizationId,
+        channel_session_id: s.id as string,
+        erro: err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200),
+      });
     }
   }
   return out;
