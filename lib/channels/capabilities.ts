@@ -11,6 +11,56 @@ import type { ChannelCapabilities, ChannelProvider, NotaDeVoz, ProviderDeMensage
 export type { ChannelProvider, ChannelCapabilities, NotaDeVoz, ProviderDeMensagem };
 
 /**
+ * As restrições de uma REDE SOCIAL (Instagram/Facebook), iguais nos dois
+ * transportes que as alcançam — o intermediado e a conexão direta com a Meta.
+ * Uma função, e não um objeto compartilhado: cada linha da matriz recebe a
+ * sua cópia e nenhuma contamina a outra se um dia divergirem.
+ */
+function capabilitiesDeRedeSocial(): ChannelCapabilities {
+  return {
+    freeformOutsideWindow: false,
+    requiresTemplates: false,
+    canManageTemplates: false,
+    banRisk: false,
+    minIntervalMs: 1000,
+    // `none` está MEDIDO, não deduzido. Era `server-convert`, e o agente com
+    // "Enviar nota de voz" ligado sintetizava mp3 e mandava pelo provedor numa
+    // conversa de Instagram: HTTP 400 em TODA tentativa (instalação real,
+    // 15/11/2026), cada uma virando uma bolha de áudio falhada, e a fila
+    // re-tentava o turno inteiro. O texto, no mesmo canal, saía.
+    //
+    // A causa está na doc das duas pontas, lida em 15/11/2026:
+    //  - a Meta aceita áudio de DM do Instagram em aac, m4a, wav e mp4 (até
+    //    25 MB) — nem mp3 nem ogg/opus, os dois formatos que sabemos sintetizar
+    //    (https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/messaging-api);
+    //  - o provedor documenta `voiceNote` (bolha de voz) SÓ para WhatsApp, e não
+    //    lista formato de áudio nenhum para Instagram/Facebook
+    //    (https://docs.zernio.com/messages/send-inbox-message).
+    //
+    // `none` é o valor da rede NÃO medida, o Facebook: a doc do Messenger não
+    // lista formato de áudio nenhum, e prometer voz lá é prometer uma bolha que
+    // falha. O Instagram, medido, sobrepõe em `NOTA_DE_VOZ_POR_REDE_SOCIAL`.
+    voiceNote: "none",
+    groups: "none",
+    costPerMessage: true,
+    alteraMensagemEnviada: false,
+    podeReagir: false,
+    transmissao: false,
+    // Nenhuma destas linhas conversa com um aparelho pareado — não existe
+    // agenda de celular a ler, e dizer `true` aqui seria um botão que só falha.
+    phonebook: false,
+    // A API oficial não tem endpoint de Status: o gesto só existe no app do
+    // WhatsApp, atrás de um aparelho pareado. Declarar `true` aqui ofereceria
+    // um botão que sempre falha (ver `publishStatus` em `./types`).
+    statusUpdates: false,
+    // Sem ponte de conversão: a venda desta linha sai pela conexão direta com a Meta
+    // (conjunto de dados + token). Declarar `true` ofereceria uma chave que não envia nada.
+    reportaConversao: false,
+    marcaLidasPorMensagem: false,
+  };
+}
+
+/**
  * A matriz descreve o que um canal de MENSAGEM permite — por isso a chave é
  * `ProviderDeMensagem`, não `ChannelProvider`. Perguntar a uma linha de voz se
  * ela manda texto fora da janela de 24h é erro de categoria, e responder
@@ -94,47 +144,12 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
   //
   // O detalhe que engana: mandar um template NÃO abre a janela. Só o cliente
   // abre, respondendo. Quem ler o 200 como "enviado" acha que funciona.
-  zernio_social: {
-    freeformOutsideWindow: false,
-    requiresTemplates: false,
-    canManageTemplates: false,
-    banRisk: false,
-    minIntervalMs: 1000,
-    // `none` está MEDIDO, não deduzido. Era `server-convert`, e o agente com
-    // "Enviar nota de voz" ligado sintetizava mp3 e mandava pelo provedor numa
-    // conversa de Instagram: HTTP 400 em TODA tentativa (instalação real,
-    // 15/11/2026), cada uma virando uma bolha de áudio falhada, e a fila
-    // re-tentava o turno inteiro. O texto, no mesmo canal, saía.
-    //
-    // A causa está na doc das duas pontas, lida em 15/11/2026:
-    //  - a Meta aceita áudio de DM do Instagram em aac, m4a, wav e mp4 (até
-    //    25 MB) — nem mp3 nem ogg/opus, os dois formatos que sabemos sintetizar
-    //    (https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/messaging-api);
-    //  - o provedor documenta `voiceNote` (bolha de voz) SÓ para WhatsApp, e não
-    //    lista formato de áudio nenhum para Instagram/Facebook
-    //    (https://docs.zernio.com/messages/send-inbox-message).
-    //
-    // `none` é o valor da rede NÃO medida, o Facebook: a doc do Messenger não
-    // lista formato de áudio nenhum, e prometer voz lá é prometer uma bolha que
-    // falha. O Instagram, medido, sobrepõe em `NOTA_DE_VOZ_POR_REDE_SOCIAL`.
-    voiceNote: "none",
-    groups: "none",
-    costPerMessage: true,
-    alteraMensagemEnviada: false,
-    podeReagir: false,
-    transmissao: false,
-    // Nenhuma destas linhas conversa com um aparelho pareado — não existe
-    // agenda de celular a ler, e dizer `true` aqui seria um botão que só falha.
-    phonebook: false,
-    // A API oficial não tem endpoint de Status: o gesto só existe no app do
-    // WhatsApp, atrás de um aparelho pareado. Declarar `true` aqui ofereceria
-    // um botão que sempre falha (ver `publishStatus` em `./types`).
-    statusUpdates: false,
-    // Sem ponte de conversão: a venda desta linha sai pela conexão direta com a Meta
-    // (conjunto de dados + token). Declarar `true` ofereceria uma chave que não envia nada.
-    reportaConversao: false,
-    marcaLidasPorMensagem: false,
-  },
+  zernio_social: capabilitiesDeRedeSocial(),
+  // A conexão direta com a Meta tem as MESMAS restrições do Instagram/Facebook
+  // intermediado: a janela de 24h e a ausência de modelo vêm da rede, não do
+  // transporte. Uma função (e não um objeto compartilhado) para que os dois
+  // não se contaminem se um dia divergirem.
+  meta_social: capabilitiesDeRedeSocial(),
   zernio: {
     freeformOutsideWindow: false,
     requiresTemplates: true,
@@ -349,6 +364,7 @@ export const PROVIDERS_DE_MENSAGEM = [
   "meta_cloud",
   "zernio",
   "zernio_social",
+  "meta_social",
   "datafy",
   // Bot do Telegram (#3440): manda texto sem template a qualquer hora — o robô
   // fala com quem o iniciou. `PROVIDERS_DE_TELEFONE` fica de fora de propósito,
@@ -381,7 +397,7 @@ export const PROVIDERS_DE_TELEFONE = [
   "meta_cloud",
   "zernio",
   "datafy",
-] as const satisfies readonly Exclude<(typeof PROVIDERS_DE_MENSAGEM)[number], "zernio_social" | "telegram">[];
+] as const satisfies readonly Exclude<(typeof PROVIDERS_DE_MENSAGEM)[number], "zernio_social" | "meta_social" | "telegram">[];
 
 /**
  * `true` quando a linha de `channel_sessions` é um canal de mensagem.

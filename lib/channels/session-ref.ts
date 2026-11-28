@@ -15,6 +15,8 @@ export type ChannelSessionRef =
   | { provider: "waha"; waha_session_name: string }
   | { provider: "meta_cloud"; meta_phone_number_id: string }
   | { provider: "zernio" | "zernio_social"; zernio_account_id: string }
+  /** Conexão direta com a Meta: o id da conta (IG user id) que a Graph API endereça. */
+  | { provider: "meta_social"; social_account_id: string }
   | { provider: "datafy"; datafy_phone_number_id: string }
   /**
    * Bot do Telegram (#3440): o id do robô é o que identifica o canal no
@@ -29,7 +31,7 @@ export type ChannelSessionRef =
  * nomeia coluna de provider, e ela some da feature junto com a decisão.
  */
 export const CHANNEL_SESSION_REF_COLUMNS =
-  "provider, waha_session_name, meta_phone_number_id, zernio_account_id, datafy_phone_number_id, telegram_bot_id";
+  "provider, waha_session_name, meta_phone_number_id, zernio_account_id, datafy_phone_number_id, telegram_bot_id, social_account_id";
 
 export function resolveSessionRef(session: ChannelSessionRef): string {
   switch (session.provider) {
@@ -45,6 +47,8 @@ export function resolveSessionRef(session: ChannelSessionRef): string {
     // Bot API conhece e que a sessão guarda (migration 9342).
     case "telegram":
       return session.telegram_bot_id;
+    case "meta_social":
+      return session.social_account_id;
     // O `accountId` que o provider devolve ao conectar a WABA. NÃO é o
     // phone_number_id da Meta: quem intermedeia guarda o número por dentro e
     // endereça pelo id dele. Mandar o id da Meta aqui responde 404.
