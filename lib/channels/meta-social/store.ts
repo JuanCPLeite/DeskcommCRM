@@ -126,13 +126,15 @@ export async function atualizarSessao(
  * dela, a mesma pessoa (`provider_conversation_id`). Pessoa diferente continua sendo uma conversa à parte,
  * e a conta de OUTRA organização nunca entra (todo filtro leva `organization_id`).
  *
- * Uma conversa que o canal novo já tem para a mesma pessoa NÃO é movida (o índice por canal e pessoa
- * seguraria, e juntar duas conversas vivas é decisão de quem atende); fica no canal antigo, visível no histórico.
+ * O banco só aceita UMA conversa por contato e canal (`conversations_unique_per_contact_session`). Por isso:
+ *  - a pessoa SEM conversa no canal novo: a conversa antiga é MOVIDA, com as mensagens;
+ *  - a pessoa que JÁ escreveu no canal novo: as mensagens da antiga são JUNTADAS na conversa nova e a
+ *    antiga é arquivada (nada é apagado, e o histórico fica inteiro numa conversa só).
  */
 export async function adotarHistoricoDaConta(
   db: SupabaseClient,
   input: { organizationId: string; sessaoNovaId: string; socialAccountId: string },
-): Promise<{ conversas: number }> {
+): Promise<{ conversas: number; juntadas: number }> {
   const { data: antigos, error } = await db
     .from("channel_sessions")
     .select("id")
@@ -142,16 +144,20 @@ export async function adotarHistoricoDaConta(
     .neq("id", input.sessaoNovaId)
     .not("archived_at", "is", null)
     .limit(20);
-  if (error || !antigos?.length) return { conversas: 0 };
+  if (error || !antigos?.length) return { conversas: 0, juntadas: 0 };
 
   const { data: jaTem } = await db
     .from("conversations")
-    .select("provider_conversation_id")
+    .select("id, provider_conversation_id")
     .eq("organization_id", input.organizationId)
     .eq("channel_session_id", input.sessaoNovaId);
-  const ocupadas = new Set((jaTem ?? []).map((c) => c.provider_conversation_id as string | null));
+  const ocupadas = new Map<string, string>();
+  for (const c of jaTem ?? []) {
+    if (c.provider_conversation_id) ocupadas.set(c.provider_conversation_id as string, c.id as string);
+  }
 
   let movidas = 0;
+  let juntadas = 0;
   for (const antigo of antigos) {
     const { data: conversas } = await db
       .from("conversations")
@@ -160,7 +166,23 @@ export async function adotarHistoricoDaConta(
       .eq("channel_session_id", antigo.id as string);
     for (const c of conversas ?? []) {
       const pessoa = (c.provider_conversation_id as string | null) ?? null;
-      if (pessoa !== null && ocupadas.has(pessoa)) continue;
+      const destino = pessoa !== null ? ocupadas.get(pessoa) : undefined;
+      if (destino) {
+        // Junta: as mensagens vão para a conversa viva do canal novo, e a antiga sai de cena.
+        const { error: eMsgs } = await db
+          .from("messages")
+          .update({ conversation_id: destino, channel_session_id: input.sessaoNovaId })
+          .eq("organization_id", input.organizationId)
+          .eq("conversation_id", c.id as string);
+        if (eMsgs) continue;
+        await db
+          .from("conversations")
+          .update({ status: "archived", status_changed_at: new Date().toISOString() })
+          .eq("organization_id", input.organizationId)
+          .eq("id", c.id as string);
+        juntadas += 1;
+        continue;
+      }
       const { error: eConversa } = await db
         .from("conversations")
         .update({ channel_session_id: input.sessaoNovaId })
@@ -172,9 +194,9 @@ export async function adotarHistoricoDaConta(
         .update({ channel_session_id: input.sessaoNovaId })
         .eq("organization_id", input.organizationId)
         .eq("conversation_id", c.id as string);
-      if (pessoa !== null) ocupadas.add(pessoa);
+      if (pessoa !== null) ocupadas.set(pessoa, c.id as string);
       movidas += 1;
     }
   }
-  return { conversas: movidas };
+  return { conversas: movidas, juntadas };
 }

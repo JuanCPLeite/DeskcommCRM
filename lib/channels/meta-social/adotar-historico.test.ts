@@ -57,7 +57,7 @@ describe("adotarHistoricoDaConta", () => {
   it("move as conversas e as mensagens do canal arquivado para o novo", async () => {
     const t = cenario();
     const r = await adotarHistoricoDaConta(banco(t), { organizationId: ORG, sessaoNovaId: "novo", socialAccountId: CONTA });
-    expect(r.conversas).toBe(2);
+    expect(r).toEqual({ conversas: 2, juntadas: 0 });
     expect(t.conversations!.filter((c) => c.organization_id === ORG).every((c) => c.channel_session_id === "novo")).toBe(true);
     expect(t.messages!.filter((m) => m.organization_id === ORG).every((m) => m.channel_session_id === "novo")).toBe(true);
   });
@@ -69,18 +69,24 @@ describe("adotarHistoricoDaConta", () => {
     expect(t.messages!.find((m) => m.id === "mx")!.channel_session_id).toBe("de-outra-org");
   });
 
-  it("a pessoa que já tem conversa no canal novo fica onde está (não junta duas conversas vivas)", async () => {
+  it("a pessoa que JÁ escreveu no canal novo: as mensagens da antiga são juntadas na nova e a antiga é arquivada", async () => {
     const t = cenario();
-    t.conversations!.push({ id: "c-nova", organization_id: ORG, channel_session_id: "novo", provider_conversation_id: "pessoa-1" });
+    t.conversations!.push({ id: "c-nova", organization_id: ORG, channel_session_id: "novo", provider_conversation_id: "pessoa-1", status: "open" });
     const r = await adotarHistoricoDaConta(banco(t), { organizationId: ORG, sessaoNovaId: "novo", socialAccountId: CONTA });
-    expect(r.conversas).toBe(1);
-    expect(t.conversations!.find((c) => c.id === "c1")!.channel_session_id).toBe("antigo");
+    expect(r).toEqual({ conversas: 1, juntadas: 1 });
+    // a mensagem da conversa antiga agora vive na conversa viva do canal novo
+    const m1 = t.messages!.find((m) => m.id === "m1")!;
+    expect(m1.conversation_id).toBe("c-nova");
+    expect(m1.channel_session_id).toBe("novo");
+    // a antiga é arquivada (e não movida, o que violaria o único por contato e canal)
+    expect(t.conversations!.find((c) => c.id === "c1")).toMatchObject({ status: "archived", channel_session_id: "antigo" });
+    // a outra pessoa, sem conversa no canal novo, foi movida inteira
     expect(t.conversations!.find((c) => c.id === "c2")!.channel_session_id).toBe("novo");
   });
 
   it("conta sem canal arquivado: não faz nada", async () => {
     const t = cenario();
     const r = await adotarHistoricoDaConta(banco(t), { organizationId: ORG, sessaoNovaId: "novo", socialAccountId: "outra-conta" });
-    expect(r.conversas).toBe(0);
+    expect(r).toEqual({ conversas: 0, juntadas: 0 });
   });
 });

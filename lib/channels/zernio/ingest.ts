@@ -1086,7 +1086,7 @@ async function contatoDaRedeSocial(
     if (typeof dono === "string") return dono;
   }
 
-  const contactId = await upsertSocialContact(admin, org, identity, name);
+  const contactId = await upsertSocialContact(admin, org, identity, name, social.identity.username ?? null);
   if (perfil) {
     const { error } = await admin.from("contact_identities").insert({
       organization_id: org,
@@ -1116,7 +1116,10 @@ async function upsertSocialContact(
   org: string,
   identity: string,
   name: string | null,
+  /** O @ da rede, sem o arroba. Vai em `display_name` (o rótulo do canal): a busca de contatos já a consulta. */
+  username: string | null = null,
 ): Promise<string> {
+  const arroba = username ? `@${username.replace(/^@/, "")}` : null;
   // Contato FUNDIDO não é alvo: ele aponta para o vencedor da fusão, e
   // escrever nele é escrever num cadastro que ninguém mais lê — o mesmo motivo
   // de `contato-por-telefone`. Aqui a guarda ainda evita um segundo defeito: o
@@ -1125,20 +1128,26 @@ async function upsertSocialContact(
   // legítimo, e sem o filtro o `.maybeSingle()` estoura.
   const { data: existing, error: readError } = await admin
     .from("contacts")
-    .select("id")
+    .select("id, display_name")
     .eq("organization_id", org)
     .eq("social_identity", identity)
     .is("is_merged_into", null)
     .maybeSingle();
   if (readError) throw new Error("social_contact_lookup_failed");
-  if (existing) return existing.id as string;
+  if (existing) {
+    // Contato que já existia sem o @ (criado antes de o perfil ser consultado): completa, uma vez.
+    if (arroba && (existing as { display_name?: string | null }).display_name !== arroba) {
+      await admin.from("contacts").update({ display_name: arroba }).eq("organization_id", org).eq("id", existing.id as string);
+    }
+    return existing.id as string;
+  }
   const { data, error } = await admin
     .from("contacts")
     .insert({
       organization_id: org,
       social_identity: identity,
       name,
-      display_name: name,
+      display_name: arroba ?? name,
       source: "social",
     })
     .select("id")
