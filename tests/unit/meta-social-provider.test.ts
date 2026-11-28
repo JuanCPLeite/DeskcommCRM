@@ -3,6 +3,7 @@ import { getAdapter } from "@/lib/channels";
 import { FalhaDeEnvioDoCanal } from "@/lib/channels/falha-de-envio";
 import {
   capabilitiesOf,
+  ehCanalSocial,
   PROVIDERS_DE_MENSAGEM,
   PROVIDERS_DE_TELEFONE,
   transportaMensagem,
@@ -39,6 +40,14 @@ describe("provider meta_social na matriz de canais", () => {
     expect(resolveSessionRef({ provider: "meta_social", social_account_id: "17841400000000000" })).toBe(
       "17841400000000000",
     );
+  });
+
+  it("ehCanalSocial responde pelos DOIS transportes de rede social e por nenhum outro", () => {
+    expect(ehCanalSocial("zernio_social")).toBe(true);
+    expect(ehCanalSocial("meta_social")).toBe(true);
+    for (const p of ["waha", "meta_cloud", "zernio", "datafy", "telegram", "wacalls", "", null, undefined]) {
+      expect(ehCanalSocial(p), String(p)).toBe(false);
+    }
   });
 
   it("a marca de tela vem da rede, e Instagram continua sendo Instagram", () => {
