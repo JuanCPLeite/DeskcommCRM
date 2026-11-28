@@ -42,6 +42,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const { appSecret } = await appSocialDaMeta();
   // Fail-closed: sem a chave do app não há como provar a origem.
   if (!verifyMetaSignature(rawBody, req.headers.get("x-hub-signature-256"), appSecret ?? "")) {
+    // Só o que ajuda a achar a causa — nunca a chave nem o corpo: sem chave cadastrada, sem cabeçalho de
+    // assinatura (não veio da Meta) ou chave diferente da do app (a assinatura não confere).
+    logger.warn("[meta-social.webhook] assinatura recusada", {
+      chave_cadastrada: Boolean(appSecret),
+      veio_assinatura: Boolean(req.headers.get("x-hub-signature-256")),
+      bytes: rawBody.length,
+    });
     return fail("invalid_signature", "Assinatura inválida.", 401);
   }
 
@@ -53,6 +60,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const eventos = parseMetaSocialWebhook(json);
+  logger.info("[meta-social.webhook] entrega recebida", {
+    eventos: eventos.length,
+    contas: [...new Set(eventos.map((e) => e.contaId))],
+  });
   const admin = createAdminClient();
 
   // Agrupa por conta: cada conta conectada arquiva o corpo cru UMA vez, na sua organização.
