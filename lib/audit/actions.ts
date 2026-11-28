@@ -658,6 +658,10 @@ export const AUDIT_ACTIONS = [
   // verificação de URL que estava valendo até alguém colar o valor novo na Meta.
   "platform_meta_app.updated",
   "platform_meta_app.verify_token_rotated",
+  // O app Meta SOCIAL (Instagram/Facebook) da INSTALAÇÃO (migration 9513): mesmo alcance e mesma
+  // razão das duas linhas acima — a chave assina a entrega do webhook de TODAS as contas.
+  "platform_meta_social_app.updated",
+  "platform_meta_social_app.verify_token_rotated",
   // A conexão da ORGANIZAÇÃO com a conta de anúncios (migration 0213).
   // Auditável porque o token gravado aqui escreve conversões na conta de
   // mídia do cliente: "quem apontou minhas vendas para este destino?" só tem

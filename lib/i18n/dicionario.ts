@@ -13052,6 +13052,20 @@ export const DICIONARIO: Traducoes = {
   },
   "Falta cadastrar o aplicativo do Google desta instalação. Leva um minuto e você faz por aqui mesmo.": { es: "Falta registrar la aplicación de Google de esta instalación. Toma un minuto y lo haces aquí mismo." },
 
+  // ─── O app Meta SOCIAL da instalação (/admin/meta-social, migration 9513) ───
+  "Instagram e Facebook da Meta desta instalação": { es: "Instagram y Facebook de Meta de esta instalación" },
+  "Credenciais do app Meta que conecta as contas do Instagram e do Facebook pelo login unificado. Elas valem para a instalação inteira — cada empresa conecta as próprias contas depois, em Conexões.": { es: "Credenciales de la app de Meta que conecta las cuentas de Instagram y Facebook con el inicio de sesión unificado. Se aplican a toda la instalación. Cada empresa conecta después sus propias cuentas, en Conexiones." },
+  "ID do app": { es: "ID de la app" },
+  "ID da configuração do login": { es: "ID de la configuración del inicio de sesión" },
+  "Fica no painel da Meta, em Configurações do app › Básico.": { es: "Está en el panel de Meta, en Configuración de la app › Básica." },
+  "Fica em Login do Facebook para Empresas › Configurações, na configuração com os ativos do Instagram.": { es: "Está en Inicio de sesión de Facebook para empresas › Configuración, en la configuración con los activos de Instagram." },
+  "Endereços para colar no painel da Meta": { es: "Direcciones para pegar en el panel de Meta" },
+  "URL de callback do webhook": { es: "URL de callback del webhook" },
+  "URI de redirecionamento do OAuth": { es: "URI de redireccionamiento de OAuth" },
+  "No painel da Meta, em Webhooks › Instagram, o token de verificação vai no campo “Verificar token” e a URL de callback é a de cima. O URI de redirecionamento vai em Login do Facebook para Empresas › Configurações e na configuração do login do Instagram.": { es: "En el panel de Meta, en Webhooks › Instagram, el token de verificación va en el campo «Verificar token» y la URL de callback es la de arriba. El URI de redireccionamiento va en Inicio de sesión de Facebook para empresas › Configuración y en la configuración del inicio de sesión de Instagram." },
+  "Instagram e Facebook (Meta)": { es: "Instagram y Facebook (Meta)" },
+  "App Meta: chave secreta, token do webhook e IDs para conectar as contas do Instagram e do Facebook": { es: "App de Meta: clave secreta, token del webhook e IDs para conectar las cuentas de Instagram y Facebook" },
+
   // ─── O App da Meta da instalação (/admin/meta, migration 0257) ───
   "API Oficial da Meta desta instalação": { es: "API Oficial de Meta de esta instalación" },
   "É com estas duas informações que o sistema confere que cada mensagem recebida pelo número oficial veio mesmo da Meta. Elas valem para a instalação inteira — cada empresa conecta o próprio número depois, em Conexões.": { es: "Con estos dos datos, el sistema comprueba que cada mensaje que llega al número oficial viene realmente de Meta. Se aplican a toda la instalación. Cada empresa conecta después su propio número, en Conexiones." },
