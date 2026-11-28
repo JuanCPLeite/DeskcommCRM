@@ -19,7 +19,7 @@ vi.mock("@/lib/supabase/admin", () => ({
       eq: () => q,
       is: () => q,
       maybeSingle: async () => ({
-        data: tokenCifrado === null ? null : { meta_social_token_encrypted: tokenCifrado, meta_social_token_expires_at: expiraEm },
+        data: tokenCifrado === null ? null : { social_token_encrypted: tokenCifrado, social_token_expires_at: expiraEm },
         error: null,
       }),
     };

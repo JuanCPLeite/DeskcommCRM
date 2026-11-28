@@ -38,17 +38,17 @@ async function sessaoDoToken(organizationId: string, contaId: string): Promise<S
   const db = createAdminClient();
   const { data } = await db
     .from("channel_sessions")
-    .select("meta_social_token_encrypted, meta_social_token_expires_at")
+    .select("social_token_encrypted, social_token_expires_at")
     .eq("organization_id", organizationId)
     .eq("provider", "meta_social")
     .eq("social_account_id", contaId)
     .is("archived_at", null)
     .maybeSingle();
-  const cifrado = data?.meta_social_token_encrypted as string | null | undefined;
+  const cifrado = data?.social_token_encrypted as string | null | undefined;
   if (!cifrado) return null;
   const token = await decryptWebhookSecret(db, cifrado);
   if (!token) return null;
-  const expira = data?.meta_social_token_expires_at as string | null | undefined;
+  const expira = data?.social_token_expires_at as string | null | undefined;
   return { token, expiraEm: expira ? new Date(expira) : null };
 }
 

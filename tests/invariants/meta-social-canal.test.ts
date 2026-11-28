@@ -54,7 +54,7 @@ describe("canal meta_social — schema", () => {
   it("guarda o token cifrado em coluna própria, que o navegador não lê", () => {
     expect(
       sql(`select count(*) from information_schema.columns where table_name = 'channel_sessions'
-        and column_name in ('meta_social_token_encrypted','meta_social_token_expires_at','social_account_id')`),
+        and column_name in ('social_token_encrypted','social_token_expires_at','social_account_id')`),
     ).toBe("3");
   });
 });

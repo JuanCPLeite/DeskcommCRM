@@ -7,8 +7,8 @@
 -- o id da conta que a Graph API endereça. O intermediário continua existindo.
 --
 -- ─── O que muda ────────────────────────────────────────────────────────────
--- 1. `channel_sessions`: `social_account_id`, `meta_social_token_encrypted` e
---    `meta_social_token_expires_at`; índice ÚNICO da conta ativa (a mesma conta
+-- 1. `channel_sessions`: `social_account_id`, `social_token_encrypted` e
+--    `social_token_expires_at`; índice ÚNICO da conta ativa (a mesma conta
 --    Instagram não pode estar em duas organizações — o webhook da Meta resolve a
 --    organização por ela, então a dupla seria vazamento entre tenants).
 -- 2. `channel_sessions_provider_check` e `channel_sessions_provider_ref_check`
@@ -23,8 +23,8 @@
 
 alter table public.channel_sessions
   add column if not exists social_account_id text,
-  add column if not exists meta_social_token_encrypted bytea,
-  add column if not exists meta_social_token_expires_at timestamptz;
+  add column if not exists social_token_encrypted bytea,
+  add column if not exists social_token_expires_at timestamptz;
 
 do $$
 begin
@@ -67,7 +67,7 @@ begin
   if to_regclass('public.channel_sessions') is not null then
     comment on column public.channel_sessions.social_account_id is
       'Id da conta Instagram/Facebook que a Graph API endereça (IG user id). É o sessionRef do canal meta_social e a chave que o webhook da Meta usa para achar a organização.';
-    comment on column public.channel_sessions.meta_social_token_encrypted is
+    comment on column public.channel_sessions.social_token_encrypted is
       'Token do login unificado cifrado por fn_encrypt_oauth. Nunca volta para a tela nem para o log.';
     comment on index public.channel_sessions_social_account_id_ativo_unique is
       'Uma conta Meta é UMA conexão ativa: o webhook resolve a organização por ela, e duas organizações com a mesma conta misturariam as caixas de entrada.';
@@ -106,7 +106,7 @@ create trigger trg_platform_meta_social_app_updated_at
 
 -- ─── A ligação do canal direto com a Meta é do servidor ────────────────────
 -- Estende o gatilho de 9093/9104: `social_account_id` decide a que organização o
--- webhook da Meta entrega as DMs daquela conta, e `meta_social_token_encrypted` é
+-- webhook da Meta entrega as DMs daquela conta, e `social_token_encrypted` é
 -- o acesso a ela. A tabela tem GRANT ALL para `authenticated` e as policies deixam
 -- o admin alterar a própria linha direto pela API do banco: sem esta trava, um
 -- admin "reservaria" a conta Instagram de outra empresa (o índice único passaria a
@@ -136,7 +136,7 @@ begin
        or new.meta_waba_id is not null
        -- 9513: a ligação do canal direto com a Meta também.
        or new.social_account_id is not null
-       or new.meta_social_token_encrypted is not null then
+       or new.social_token_encrypted is not null then
       raise exception 'canal_ligacao_ao_provedor_e_do_servidor' using errcode = '42501';
     end if;
     return new;
@@ -149,9 +149,9 @@ begin
        is distinct from
      (old.meta_token_encrypted, old.meta_phone_number_id, old.meta_waba_id)
      -- 9513: a ligação do canal direto com a Meta também.
-     or (new.social_account_id, new.meta_social_token_encrypted, new.meta_social_token_expires_at)
+     or (new.social_account_id, new.social_token_encrypted, new.social_token_expires_at)
        is distinct from
-     (old.social_account_id, old.meta_social_token_encrypted, old.meta_social_token_expires_at)
+     (old.social_account_id, old.social_token_encrypted, old.social_token_expires_at)
      -- 9513: desarquivar o canal direto também é do servidor — senão o admin 'reserva' a
      -- conta já desconectada (o webhook voltaria a entregar nela) e bloqueia a reconexão legítima.
      or (old.provider = 'meta_social' and old.archived_at is not null and new.archived_at is null)

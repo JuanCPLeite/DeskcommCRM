@@ -473,8 +473,8 @@ export async function DELETE(
     // social acima: a Meta fora do ar vai para a auditoria e NÃO desfaz a exclusão.
     metaSocial = await desligarContaNaMeta(createAdminClient(), activeOrg.orgId, id);
     // O token cifrado não fica guardado nem numa linha arquivada, e a URL antiga vira 404.
-    patch.meta_social_token_encrypted = null;
-    patch.meta_social_token_expires_at = null;
+    patch.social_token_encrypted = null;
+    patch.social_token_expires_at = null;
     patch.webhook_path_token = randomUUID().replace(/-/g, "");
   } else if (session.provider === BOT_CHANNEL_PROVIDER) {
     // O robô de mensagens (#3486): o webhook dele aponta para esta instalação.
@@ -620,7 +620,7 @@ export async function DELETE(
   const escritor =
     session.zernio_credencial_da_instalacao === true ||
     "meta_token_encrypted" in patch ||
-    "meta_social_token_encrypted" in patch
+    "social_token_encrypted" in patch
       ? createAdminClient()
       : supabase;
   if (arquivar) {

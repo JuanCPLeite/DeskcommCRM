@@ -54,8 +54,8 @@ export async function criarSessao(db: SupabaseClient, nova: NovaSessao): Promise
       organization_id: nova.organizationId,
       provider: PROVIDER,
       social_account_id: nova.socialAccountId,
-      meta_social_token_encrypted: nova.tokenCifrado,
-      meta_social_token_expires_at: nova.tokenExpiraEm?.toISOString() ?? null,
+      social_token_encrypted: nova.tokenCifrado,
+      social_token_expires_at: nova.tokenExpiraEm?.toISOString() ?? null,
       webhook_secret_encrypted: segredo,
       webhook_path_token: randomBytes(24).toString("hex"),
       display_name: `instagram · ${nova.username || nova.socialAccountId}`,
@@ -90,8 +90,8 @@ export async function atualizarSessao(
   const { error } = await db
     .from("channel_sessions")
     .update({
-      meta_social_token_encrypted: input.tokenCifrado,
-      meta_social_token_expires_at: input.tokenExpiraEm?.toISOString() ?? null,
+      social_token_encrypted: input.tokenCifrado,
+      social_token_expires_at: input.tokenExpiraEm?.toISOString() ?? null,
       status: "WORKING",
     })
     .eq("organization_id", input.organizationId)

@@ -17,6 +17,8 @@
  */
 import { NextResponse, type NextRequest } from "next/server";
 
+import { comIdDaRequisicao, fail } from "@/lib/api/wrappers";
+
 import { abrirArquivoDoWebhook, fecharArquivoDoWebhook } from "@/lib/channels/arquivo-de-webhook";
 import { verificationChallenge, verifyMetaSignature } from "@/lib/channels/meta/webhook";
 import { appSocialDaMeta } from "@/lib/channels/meta-social/app";
@@ -31,8 +33,8 @@ export const runtime = "nodejs";
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const { verifyToken } = await appSocialDaMeta();
   const challenge = verificationChallenge(req.nextUrl.searchParams, verifyToken ?? "");
-  if (challenge === null) return new NextResponse("forbidden", { status: 403 });
-  return new NextResponse(challenge, { status: 200, headers: { "content-type": "text/plain; charset=utf-8" } });
+  if (challenge === null) return fail("forbidden", "Verificação recusada.", 403);
+  return comIdDaRequisicao(new NextResponse(challenge, { status: 200, headers: { "content-type": "text/plain; charset=utf-8" } }), req);
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -40,14 +42,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const { appSecret } = await appSocialDaMeta();
   // Fail-closed: sem a chave do app não há como provar a origem.
   if (!verifyMetaSignature(rawBody, req.headers.get("x-hub-signature-256"), appSecret ?? "")) {
-    return NextResponse.json({ error: { code: "invalid_signature" } }, { status: 401 });
+    return fail("invalid_signature", "Assinatura inválida.", 401);
   }
 
   let json: unknown;
   try {
     json = JSON.parse(rawBody);
   } catch {
-    return NextResponse.json({ error: { code: "invalid_json" } }, { status: 400 });
+    return fail("invalid_json", "Corpo inválido.", 400);
   }
 
   const eventos = parseMetaSocialWebhook(json);
@@ -89,6 +91,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
   }
 
-  if (falhou) return NextResponse.json({ error: { code: "ingest_failed" } }, { status: 500 });
-  return NextResponse.json({ received: true }, { status: 200 });
+  if (falhou) return fail("ingest_failed", "Falha ao processar a entrega.", 500);
+  return comIdDaRequisicao(NextResponse.json({ received: true }, { status: 200 }), req);
 }

@@ -90,7 +90,7 @@ describe("GET /api/v1/channels/meta-social", () => {
     display_name: "instagram · loja",
     social_account_id: "17841400000000001",
     status: "WORKING",
-    meta_social_token_expires_at: null,
+    social_token_expires_at: null,
     metadata: { meta_social_webhook_assinado: true },
     created_at: "2026-11-27T12:00:00Z",
     ...over,
@@ -109,7 +109,7 @@ describe("GET /api/v1/channels/meta-social", () => {
   });
 
   it("token vencido pela data gravada aparece como `token_vencido`; webhook não assinado, como pendência", async () => {
-    contasDoBanco = [conta({ meta_social_token_expires_at: new Date(Date.now() - 1000).toISOString(), metadata: { meta_social_webhook_assinado: false } })];
+    contasDoBanco = [conta({ social_token_expires_at: new Date(Date.now() - 1000).toISOString(), metadata: { meta_social_webhook_assinado: false } })];
     const { data } = await (await GET(reqGet())).json();
     expect(data.accounts[0]).toMatchObject({ health: "token_vencido", webhook_assinado: false });
   });

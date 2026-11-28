@@ -66,7 +66,7 @@ interface LinhaDaConta {
   display_name: string | null;
   social_account_id: string | null;
   status: string | null;
-  meta_social_token_expires_at: string | null;
+  social_token_expires_at: string | null;
   metadata: Record<string, unknown> | null;
   created_at: string;
 }
@@ -80,7 +80,7 @@ export async function GET(_req?: NextRequest): Promise<NextResponse> {
   // Colunas EXPLÍCITAS: o token cifrado nunca entra na seleção.
   const { data, error } = await createAdminClient()
     .from("channel_sessions")
-    .select("id, display_name, social_account_id, status, meta_social_token_expires_at, metadata, created_at")
+    .select("id, display_name, social_account_id, status, social_token_expires_at, metadata, created_at")
     .eq("organization_id", authz.org.orgId)
     .eq("provider", "meta_social")
     .is("archived_at", null)
@@ -95,14 +95,14 @@ export async function GET(_req?: NextRequest): Promise<NextResponse> {
 
   const agora = Date.now();
   const contas = ((data ?? []) as LinhaDaConta[]).map((c) => {
-    const vencido = c.meta_social_token_expires_at !== null && new Date(c.meta_social_token_expires_at).getTime() <= agora;
+    const vencido = c.social_token_expires_at !== null && new Date(c.social_token_expires_at).getTime() <= agora;
     return {
       channel_id: c.id,
       ig_id: c.social_account_id,
-      username: (c.display_name ?? "").replace(/^instagram\s*·\s*/i, ""),
+      username: c.display_name ? c.display_name.replace(/^instagram\s*·\s*/i, "") : "",
       status: c.status,
       health: vencido ? "token_vencido" : c.status === "WORKING" ? "ok" : "atencao",
-      token_expires_at: c.meta_social_token_expires_at,
+      token_expires_at: c.social_token_expires_at,
       webhook_assinado: c.metadata?.meta_social_webhook_assinado === true,
       connected_at: c.created_at,
     };

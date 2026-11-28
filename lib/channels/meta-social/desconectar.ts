@@ -26,12 +26,12 @@ export async function desligarContaNaMeta(
   try {
     const { data, error } = await db
       .from("channel_sessions")
-      .select("social_account_id, meta_social_token_encrypted")
+      .select("social_account_id, social_token_encrypted")
       .eq("organization_id", organizationId)
       .eq("id", sessionId)
       .maybeSingle();
     if (error) return "falhou";
-    const cifrado = data?.meta_social_token_encrypted as string | null | undefined;
+    const cifrado = data?.social_token_encrypted as string | null | undefined;
     const conta = data?.social_account_id as string | null | undefined;
     if (!cifrado || !conta) return "sem_credencial";
     const token = await decryptWebhookSecret(db, cifrado);

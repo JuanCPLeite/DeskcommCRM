@@ -5529,8 +5529,8 @@ export type Database = {
           datafy_phone_number_id: string | null;
           datafy_token_encrypted: string | null;
           datafy_waba_id: string | null;
-          meta_social_token_encrypted: string | null;
-          meta_social_token_expires_at: string | null;
+          social_token_encrypted: string | null;
+          social_token_expires_at: string | null;
           social_account_id: string | null;
           display_name: string | null;
           engine: string;
@@ -5577,8 +5577,8 @@ export type Database = {
           datafy_phone_number_id?: string | null;
           datafy_token_encrypted?: string | null;
           datafy_waba_id?: string | null;
-          meta_social_token_encrypted?: string | null;
-          meta_social_token_expires_at?: string | null;
+          social_token_encrypted?: string | null;
+          social_token_expires_at?: string | null;
           social_account_id?: string | null;
           display_name?: string | null;
           engine?: string;
@@ -5624,8 +5624,8 @@ export type Database = {
           datafy_phone_number_id?: string | null;
           datafy_token_encrypted?: string | null;
           datafy_waba_id?: string | null;
-          meta_social_token_encrypted?: string | null;
-          meta_social_token_expires_at?: string | null;
+          social_token_encrypted?: string | null;
+          social_token_expires_at?: string | null;
           social_account_id?: string | null;
           display_name?: string | null;
           engine?: string;

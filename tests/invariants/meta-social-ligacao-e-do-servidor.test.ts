@@ -7,7 +7,7 @@ import { motivoDoErro } from "./psql-transporte";
  * A LIGAÇÃO DO CANAL DIRETO COM A META É DO SERVIDOR (migration 9513).
  *
  * `social_account_id` decide a que organização o webhook da Meta entrega as DMs
- * daquela conta, e `meta_social_token_encrypted` é o acesso a ela. A tabela tem
+ * daquela conta, e `social_token_encrypted` é o acesso a ela. A tabela tem
  * GRANT ALL para `authenticated` e as policies deixam o admin da organização
  * alterar a própria linha direto pela API do banco: sem esta trava, um admin
  * "reservaria" a conta Instagram de outra empresa (o índice único passaria a
@@ -20,7 +20,7 @@ const CANAL = "cccccccc-9513-4000-8000-000000000001";
 
 const LINHA = `
   insert into public.channel_sessions
-    (id, organization_id, provider, social_account_id, meta_social_token_encrypted,
+    (id, organization_id, provider, social_account_id, social_token_encrypted,
      webhook_path_token, webhook_secret_encrypted, display_name, archived_at)
   values ('${CANAL}', '${GOV_ORG}', 'meta_social', '17841400009513001', '\\x01'::bytea,
      'tok-9513-inv', '\\x00'::bytea, 'Instagram 9513', now());`;
@@ -66,8 +66,8 @@ function insercao(coluna: string | null, valor = "null"): string {
 
 const COLUNAS: Array<[string, string]> = [
   ["social_account_id", "'17841400009513999'"],
-  ["meta_social_token_encrypted", "'\\x02'::bytea"],
-  ["meta_social_token_expires_at", "now()"],
+  ["social_token_encrypted", "'\\x02'::bytea"],
+  ["social_token_expires_at", "now()"],
 ];
 
 beforeAll(() => {
@@ -82,7 +82,7 @@ describe("9513: o admin da organização não grava a ligação do canal direto 
   });
 
   it("UPDATE que zera o token: 42501 (a desconexão zera pelo service role)", () => {
-    const erro = erroDe(() => comoAdmin(`update public.channel_sessions set meta_social_token_encrypted = null where id = '${CANAL}'`));
+    const erro = erroDe(() => comoAdmin(`update public.channel_sessions set social_token_encrypted = null where id = '${CANAL}'`));
     expect(erro, "o admin zerou o token SEM erro").not.toBeNull();
     expect(erro).toContain(RECUSA);
   });
@@ -107,8 +107,8 @@ describe("9513: o admin da organização não grava a ligação do canal direto 
     expect(
       comoAdmin(`
         update public.channel_sessions
-           set social_account_id = social_account_id, meta_social_token_encrypted = meta_social_token_encrypted,
-               meta_social_token_expires_at = meta_social_token_expires_at
+           set social_account_id = social_account_id, social_token_encrypted = social_token_encrypted,
+               social_token_expires_at = social_token_expires_at
          where id = '${CANAL}'`),
     ).toContain("LINHAS:1");
   });
@@ -123,8 +123,8 @@ describe("9513: o servidor (service role) grava a ligação do canal direto", ()
     expect(
       comoServidor(`
         update public.channel_sessions
-           set social_account_id = '17841400009513002', meta_social_token_encrypted = '\\x02'::bytea,
-               meta_social_token_expires_at = now()
+           set social_account_id = '17841400009513002', social_token_encrypted = '\\x02'::bytea,
+               social_token_expires_at = now()
          where id = '${CANAL}'`),
     ).toContain("LINHAS:1");
   });
@@ -134,6 +134,6 @@ describe("9513: o servidor (service role) grava a ligação do canal direto", ()
   });
 
   it("UPDATE que zera o token (o que a desconexão faz)", () => {
-    expect(comoServidor(`update public.channel_sessions set meta_social_token_encrypted = null where id = '${CANAL}'`)).toContain("LINHAS:1");
+    expect(comoServidor(`update public.channel_sessions set social_token_encrypted = null where id = '${CANAL}'`)).toContain("LINHAS:1");
   });
 });

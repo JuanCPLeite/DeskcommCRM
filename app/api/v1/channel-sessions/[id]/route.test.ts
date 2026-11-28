@@ -616,8 +616,8 @@ describe("DELETE /api/v1/channel-sessions/[id]", () => {
 
       expect((await res.json()).data.archived).toBe(true);
       const patch = db.escritas[0]?.patch as Linha;
-      expect(patch.meta_social_token_encrypted).toBeNull();
-      expect(patch.meta_social_token_expires_at).toBeNull();
+      expect(patch.social_token_encrypted).toBeNull();
+      expect(patch.social_token_expires_at).toBeNull();
       expect(patch.webhook_path_token).toMatch(/^[a-f0-9]{32}$/);
       expect(patch.webhook_path_token).not.toBe("tokenantigo");
     });

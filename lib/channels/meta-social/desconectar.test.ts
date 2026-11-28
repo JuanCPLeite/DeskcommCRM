@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const desassinar = vi.fn(async (..._a: unknown[]) => true);
-let linha: { social_account_id: string; meta_social_token_encrypted: string | null } | null = {
+let linha: { social_account_id: string; social_token_encrypted: string | null } | null = {
   social_account_id: "1784",
-  meta_social_token_encrypted: "\\xTOKEN",
+  social_token_encrypted: "\\xTOKEN",
 };
 let erroDeLeitura: { code: string } | null = null;
 let tokenClaro: string | null = "TOKEN-DO-LOGIN";
@@ -24,7 +24,7 @@ function dbFalso() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  linha = { social_account_id: "1784", meta_social_token_encrypted: "\\xTOKEN" };
+  linha = { social_account_id: "1784", social_token_encrypted: "\\xTOKEN" };
   erroDeLeitura = null;
   tokenClaro = "TOKEN-DO-LOGIN";
   desassinar.mockResolvedValue(true);
@@ -37,9 +37,9 @@ describe("desligarContaNaMeta (best-effort: nunca lança, nunca impede a descone
   });
 
   it("sem token gravado ou que não decifra: 'sem_credencial', sem chamar a Meta", async () => {
-    linha = { social_account_id: "1784", meta_social_token_encrypted: null };
+    linha = { social_account_id: "1784", social_token_encrypted: null };
     expect(await desligarContaNaMeta(dbFalso(), "org-A", "sessao-1")).toBe("sem_credencial");
-    linha = { social_account_id: "1784", meta_social_token_encrypted: "\\xTOKEN" };
+    linha = { social_account_id: "1784", social_token_encrypted: "\\xTOKEN" };
     tokenClaro = null;
     expect(await desligarContaNaMeta(dbFalso(), "org-A", "sessao-1")).toBe("sem_credencial");
     expect(desassinar).not.toHaveBeenCalled();
