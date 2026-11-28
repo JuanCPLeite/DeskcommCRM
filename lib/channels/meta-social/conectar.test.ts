@@ -18,6 +18,7 @@ const sessaoAtivaDaConta = vi.fn(async () => null as null | { id: string; organi
 const criarSessao = vi.fn(async () => ({ id: "sessao-nova" }));
 const atualizarSessao = vi.fn(async () => undefined);
 
+const adotarHistoricoDaConta = vi.fn(async (..._a: unknown[]) => ({ conversas: 0 }));
 vi.mock("@/lib/channels/meta-social/app", () => ({ appSocialDaMeta: async () => appVigente }));
 vi.mock("@/lib/channels/meta-social/graph", async () => {
   const real = await vi.importActual<typeof import("@/lib/channels/meta-social/graph")>("@/lib/channels/meta-social/graph");
@@ -37,6 +38,7 @@ vi.mock("@/lib/channels/meta-social/store", () => ({
   sessaoAtivaDaConta: (...a: unknown[]) => sessaoAtivaDaConta(...(a as [])),
   criarSessao: (...a: unknown[]) => criarSessao(...(a as [])),
   atualizarSessao: (...a: unknown[]) => atualizarSessao(...(a as [])),
+  adotarHistoricoDaConta: (...a: unknown[]) => adotarHistoricoDaConta(...a),
 }));
 vi.mock("@/lib/webhooks/secrets", () => ({ encryptWebhookSecret: async (_d: unknown, v: string) => `CIFRADO(${v.length})` }));
 
@@ -85,6 +87,9 @@ describe("concluirConexaoMeta", () => {
     expect(dados.socialAccountId).toBe("1784");
     expect(dados.tokenCifrado).toBe(`CIFRADO(${"TOKEN-DO-LOGIN".length})`);
     expect(JSON.stringify(dados)).not.toContain("TOKEN-DO-LOGIN");
+    // Conta NOVA para a organização: o histórico dos canais arquivados DELA volta para o canal novo.
+    expect(adotarHistoricoDaConta).toHaveBeenCalledTimes(1);
+    expect((adotarHistoricoDaConta.mock.calls[0] as unknown[])[1]).toMatchObject({ organizationId: "org-A", socialAccountId: "1784" });
   });
 
   it("estado inválido, vencido ou de outra pessoa: nada é trocado nem gravado", async () => {
