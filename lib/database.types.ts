@@ -5529,6 +5529,9 @@ export type Database = {
           datafy_phone_number_id: string | null;
           datafy_token_encrypted: string | null;
           datafy_waba_id: string | null;
+          meta_social_token_encrypted: string | null;
+          meta_social_token_expires_at: string | null;
+          social_account_id: string | null;
           display_name: string | null;
           engine: string;
           entry_pipeline_id: string | null;
@@ -5574,6 +5577,9 @@ export type Database = {
           datafy_phone_number_id?: string | null;
           datafy_token_encrypted?: string | null;
           datafy_waba_id?: string | null;
+          meta_social_token_encrypted?: string | null;
+          meta_social_token_expires_at?: string | null;
+          social_account_id?: string | null;
           display_name?: string | null;
           engine?: string;
           entry_pipeline_id?: string | null;
@@ -5618,6 +5624,9 @@ export type Database = {
           datafy_phone_number_id?: string | null;
           datafy_token_encrypted?: string | null;
           datafy_waba_id?: string | null;
+          meta_social_token_encrypted?: string | null;
+          meta_social_token_expires_at?: string | null;
+          social_account_id?: string | null;
           display_name?: string | null;
           engine?: string;
           entry_pipeline_id?: string | null;
@@ -12866,6 +12875,40 @@ export type Database = {
         Update: {
           app_secret_encrypted?: string | null;
           id?: number;
+          updated_at?: string;
+          updated_by?: string | null;
+          verify_token_created_at?: string | null;
+          verify_token_encrypted?: string | null;
+        };
+        Relationships: [];
+      };
+      platform_meta_social_app: {
+        Row: {
+          app_id: string | null;
+          app_secret_encrypted: string | null;
+          id: number;
+          login_config_id: string | null;
+          updated_at: string;
+          updated_by: string | null;
+          verify_token_created_at: string | null;
+          verify_token_encrypted: string | null;
+        };
+        ComputedFields: never;
+        Insert: {
+          app_id?: string | null;
+          app_secret_encrypted?: string | null;
+          id?: number;
+          login_config_id?: string | null;
+          updated_at?: string;
+          updated_by?: string | null;
+          verify_token_created_at?: string | null;
+          verify_token_encrypted?: string | null;
+        };
+        Update: {
+          app_id?: string | null;
+          app_secret_encrypted?: string | null;
+          id?: number;
+          login_config_id?: string | null;
           updated_at?: string;
           updated_by?: string | null;
           verify_token_created_at?: string | null;

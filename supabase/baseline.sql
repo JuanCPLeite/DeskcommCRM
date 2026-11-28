@@ -9590,15 +9590,22 @@ alter table public.channel_sessions
   add column if not exists telegram_bot_id text,
   add column if not exists telegram_token_encrypted bytea;
 
+-- meta_social (migration 9454) — canal DIRETO com a Meta; as colunas nascem
+-- ANTES das constraints abaixo, que as referenciam.
+alter table public.channel_sessions
+  add column if not exists social_account_id text,
+  add column if not exists meta_social_token_encrypted bytea,
+  add column if not exists meta_social_token_expires_at timestamptz;
+
 alter table public.channel_sessions
   drop constraint if exists channel_sessions_provider_check;
 
 alter table public.channel_sessions
   add constraint channel_sessions_provider_check
   -- 'wacalls' (0233), 'zernio_social' (0368), 'datafy' (0387) e 'telegram'
-  -- (9342) somados AQUI — UM bloco só por constraint (não duplicar drop+add
-  -- por migration).
-  check (provider = any (array['waha'::text, 'meta_cloud'::text, 'zernio'::text, 'wacalls'::text, 'zernio_social'::text, 'datafy'::text, 'telegram'::text]));
+  -- (9342) e 'meta_social' (9454) somados AQUI — UM bloco só por constraint
+  -- (não duplicar drop+add por migration).
+  check (provider = any (array['waha'::text, 'meta_cloud'::text, 'zernio'::text, 'wacalls'::text, 'zernio_social'::text, 'datafy'::text, 'telegram'::text, 'meta_social'::text]));
 
 alter table public.channel_sessions
   drop constraint if exists channel_sessions_provider_ref_check;
@@ -9613,7 +9620,9 @@ alter table public.channel_sessions
     (provider = 'wacalls'    and wacalls_session_id    is not null) or
     (provider = 'datafy'     and datafy_phone_number_id is not null) or
     -- Bot do Telegram (migration 9342): endereça pelo id do robô.
-    (provider = 'telegram'   and telegram_bot_id      is not null)
+    (provider = 'telegram'   and telegram_bot_id      is not null) or
+    -- Conexão direta com a Meta (migration 9454): endereça pelo id da conta.
+    (provider = 'meta_social' and social_account_id    is not null)
   );
 
 comment on column public.channel_sessions.zernio_account_id is
@@ -14802,7 +14811,9 @@ alter table public.webhook_events_log
     -- (migration 9342, #3486) o robô do Telegram. Sem ele aqui, todo update do
     -- robô logava "não consegui abrir a linha" e o corpo cru não era guardado
     -- (medido na prova de tela). O corpo do update não carrega o token.
-    'telegram'
+    'telegram',
+    -- (migration 9454) a conexão direta com a Meta (Instagram/Facebook).
+    'meta_social'
   ));
 
 -- ---- a marca da instalação sai do .env e vai para o banco (migration 0155) ----
@@ -89783,5 +89794,54 @@ comment on column public.crm_metas.alvo is
 
 comment on table public.crm_metas is
   'Meta mensal da organização por indicador (#3025 fatia 1, valor na #4796). `pipeline_id` nulo + `vendedor_id` nulo = meta da EMPRESA; `pipeline_id` preenchido = meta do funil; `vendedor_id` preenchido = meta do vendedor. Leitura org-scoped; escrita manager+ (Server Action definirMetaMensal, com auditoria).';
+
+notify pgrst, 'reload schema';
+
+-- ---- canal direto com a Meta, Instagram/Facebook (migration 9454) ----
+-- O vocabulário (`channel_sessions.provider`, `channel_sessions_provider_ref_check`
+-- e `webhook_events_log_provider_check`) e as colunas foram somados nos blocos
+-- ÚNICOS de cada constraint, lá em cima; este bloco acrescenta o índice, os
+-- comentários e a tabela de credenciais do app (exclusiva do servidor).
+create unique index if not exists channel_sessions_social_account_id_ativo_unique
+  on public.channel_sessions (social_account_id)
+  where archived_at is null and social_account_id is not null;
+
+do $canal_meta_social$
+begin
+  if to_regclass('public.channel_sessions') is not null then
+    comment on column public.channel_sessions.social_account_id is
+      'Id da conta Instagram/Facebook que a Graph API endereça (IG user id). É o sessionRef do canal meta_social e a chave que o webhook da Meta usa para achar a organização.';
+    comment on column public.channel_sessions.meta_social_token_encrypted is
+      'Token do login unificado cifrado por fn_encrypt_oauth. Nunca volta para a tela nem para o log.';
+    comment on index public.channel_sessions_social_account_id_ativo_unique is
+      'Uma conta Meta é UMA conexão ativa: o webhook resolve a organização por ela, e duas organizações com a mesma conta misturariam as caixas de entrada.';
+  end if;
+end
+$canal_meta_social$;
+
+create table if not exists public.platform_meta_social_app (
+  id smallint primary key default 1,
+  app_id text,
+  login_config_id text,
+  app_secret_encrypted bytea,
+  verify_token_encrypted bytea,
+  verify_token_created_at timestamptz,
+  updated_at timestamptz not null default now(),
+  updated_by uuid,
+  constraint platform_meta_social_app_singleton check (id = 1)
+);
+
+comment on table public.platform_meta_social_app is
+  'O app Meta DESTA INSTALAÇÃO para Instagram/Facebook (singleton): ID do app e da configuração do login (públicos), chave secreta que assina o webhook e token de verificação do handshake (cifrados). Server-side only: RLS ligada sem policies e grants revogados de anon/authenticated.';
+
+alter table public.platform_meta_social_app enable row level security;
+
+revoke all on public.platform_meta_social_app from anon, authenticated;
+grant select, insert, update on public.platform_meta_social_app to service_role;
+
+drop trigger if exists trg_platform_meta_social_app_updated_at on public.platform_meta_social_app;
+create trigger trg_platform_meta_social_app_updated_at
+  before update on public.platform_meta_social_app
+  for each row execute function public.fn_set_updated_at();
 
 notify pgrst, 'reload schema';
